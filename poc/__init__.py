@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 # The repository root, found from this file's location, so the examples work
 # from any working directory.
 REPO_ROOT = Path(__file__).resolve().parent.parent
-# Where examples 01 and 04 write their JSON results (gitignored).
+# Where examples 01, 04 and 07 write their JSON results (gitignored).
 RESULTS_DIR = REPO_ROOT / "results"
 
 # Runs once, the first time an example imports anything from poc.

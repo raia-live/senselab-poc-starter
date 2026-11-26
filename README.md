@@ -1,6 +1,6 @@
 # SenseLab POC starter
 
-Seven runnable examples for a first SenseLab memory experiment. One agent learns a rule and saves it. A second agent, starting fresh, is graded on the same kind of task with that memory and without it.
+Eight runnable examples for a first SenseLab memory experiment. One agent learns a rule and saves it. A second agent, starting fresh, is graded on the same kind of task with that memory and without it.
 
 Each example is a folder with a `run.py` and a `README.md`. The only shared code is three small modules in `poc/`.
 
@@ -9,8 +9,8 @@ Each example is a folder with a `run.py` and a `README.md`. The only shared code
 - Python 3.11 or later.
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) to install dependencies and run the scripts. `pip` works too (see step 2).
 - A SenseLab account and an API key (step 3).
-- For examples 01, 03, 04 and 06: a model API key from Anthropic or OpenAI.
-- For example 05: a second SenseLab API key from a different account.
+- For examples 01, 03, 04 and 06: a model API key from Anthropic or OpenAI. Example 07 uses one if it is set.
+- For examples 05 and 07: a second SenseLab API key from a different account.
 - For example 06: the Claude Code CLI.
 
 ## Setup
@@ -63,9 +63,10 @@ All of them go in `.env`. `.env.example` lists them with comments.
 | --- | --- | --- |
 | `AMFS_HTTP_URL` | all examples | `https://amfs-login.sense-lab.ai` (already in `.env.example`) |
 | `AMFS_API_KEY` | all examples | your SenseLab API key |
-| `AMFS_API_KEY_B` | 05, and optionally 00 | a second SenseLab key from a different user or account |
-| `ANTHROPIC_API_KEY` | 01, 03, 04, 06 | an Anthropic API key. 06 works only with this one |
-| `OPENAI_API_KEY` | 01, 03, 04 | use in place of the Anthropic key. Also set `POC_MODEL` |
+| `AMFS_API_KEY_B` | 05, 07, and optionally 00 | a second SenseLab key from a different user or account |
+| `AMFS_API_KEYS_B_PER_CASE` | 07, optional | comma-separated keys, one account per case. Replaces `AMFS_API_KEY_B` in 07 |
+| `ANTHROPIC_API_KEY` | 01, 03, 04, 06, optional in 07 | an Anthropic API key. 06 works only with this one |
+| `OPENAI_API_KEY` | 01, 03, 04, optional in 07 | use in place of the Anthropic key. Also set `POC_MODEL` |
 | `POC_MODEL` | 01, 03, 04 | model name. Optional with Anthropic (default `claude-sonnet-5-5`), required with OpenAI |
 
 If both model keys are set, Anthropic is used.
@@ -83,8 +84,11 @@ Run them in order. Every command accepts `--help`.
 | [04_agent_memory_tools](examples/04_agent_memory_tools) | The model searches and writes memory itself, through tools | `uv run python examples/04_agent_memory_tools/run.py` | not yet |
 | [05_room_two_keys](examples/05_room_two_keys) | Two agents on different API keys share memory and messages through a room | `uv run python examples/05_room_two_keys/run.py` | yes |
 | [06_claude_code_headless](examples/06_claude_code_headless) | The handoff experiment with headless Claude Code | `uv run python examples/06_claude_code_headless/run.py` | not yet |
+| [07_readonly_case_experiment](examples/07_readonly_case_experiment) | The handoff experiment with Agent B in another account, read-only, one case at a time, and a control with no memory | `uv run python examples/07_readonly_case_experiment/run.py` | memory steps yes, model steps not yet |
 
-The READMEs for 00, 02 and 05 show real output. The four examples that call a model have not been run end to end yet. Their READMEs show the output format with placeholders.
+The READMEs for 00, 02 and 05 show real output, and so does the one for 07 for its memory steps. The model calls in 01, 03, 04, 06 and 07 have not been run end to end yet. Their READMEs show that output format with placeholders.
+
+If Agent B must be limited by the server to reading one case, start with 07. If one account for both agents is enough, start with 01.
 
 Each example README has the same sections: what it needs, how to run it, the output and how to read it, how the code works, what to edit, how to adapt it, and known gotchas.
 
@@ -108,13 +112,17 @@ Does Agent B need a room to read what Agent A wrote?
 
 No, if both use the same API key. Entries are shared between agents on a key, and B finds A's entry by retrieving on the same `entity_path` ([01](examples/01_memory_handoff)). A room is needed when the keys belong to different users ([05](examples/05_room_two_keys)).
 
+Can Agent B be limited to reading one case, with no write access?
+
+Yes, when B's key belongs to a different account from A's. A opens a room on the case's path and shares a join link with the viewer role. B can then read that path and nothing else in A's account, and the server refuses B's writes ([07](examples/07_readonly_case_experiment)).
+
 How do we isolate cases, reset memory, and run a control without memory?
 
 Give each case and each run its own `entity_path` and pass it to every `retrieve`. Entries cannot be deleted, so a reset is a new path. The control arm never creates a memory object ([02](examples/02_isolation_and_control)).
 
 What do traces capture?
 
-Committing an outcome stores a trace of the session: its queries, the entries it read, and timing. Prompts, responses, actions and model usage are stored only if you pass them ([03](examples/03_inspect_traces)). For retention and deletion terms, ask your SenseLab contact.
+Committing an outcome stores a trace of the session: its queries, the entries it read, and timing. To see what an agent retrieved without committing anything, save the return value of `retrieve` ([07](examples/07_readonly_case_experiment)). Prompts, responses, actions and model usage are stored only if you pass them ([03](examples/03_inspect_traces)). For retention and deletion terms, ask your SenseLab contact.
 
 Is the setup different with headless Claude Code?
 
@@ -140,7 +148,7 @@ Every run writes under a path containing a new run id, so runs do not collide. O
 | `FAILED: could not reach ...` | wrong `AMFS_HTTP_URL`, or no network | use the URL from `.env.example` |
 | `Set ANTHROPIC_API_KEY or OPENAI_API_KEY in .env` | no model key | add one |
 | `Set POC_MODEL in .env` | OpenAI key without a model name | add `POC_MODEL` |
-| `AMFS_API_KEY_B is not set` | example 05 needs a second key | see the [05 README](examples/05_room_two_keys) |
-| `FAILED: ... 402 ...` in example 05 | a room from an earlier run is still open | `uv run python examples/05_room_two_keys/run.py cleanup` |
+| `AMFS_API_KEY_B is not set` | examples 05 and 07 need a second key | see the [05 README](examples/05_room_two_keys) |
+| `FAILED: ... 402 ...` in example 05 or 07 | a room from an earlier run is still open | run that example with `cleanup`, e.g. `uv run python examples/05_room_two_keys/run.py cleanup` |
 | ``FAILED: `claude` is not on PATH.`` | Claude Code is not installed | see the [06 README](examples/06_claude_code_headless) |
 | a `.amfs/` folder appears | a script built `AgentMemory(...)` without `from_env` | use `AgentMemory.from_env(...)` and delete the folder |
