@@ -7,6 +7,15 @@ to a different account, joins, retrieves, and is graded with that memory
 next case. B never writes and never commits an outcome; what it retrieved is
 saved to a results file.
 
+The SenseLab calls, in order, for one case:
+
+    A  write(path, "rule", ...)                  save the case's rule
+    A  room_create(path)                         a room that shares only that path
+    A  room_share(room_id, role="viewer")        a single-use, read-only join link
+    B  room_redeem(token), room_join(room_id)    B's account enters the room
+    B  retrieve(task, entity_path=path)          B reads the rule; the result is saved
+    A  room_delete(room_id)                      B's access to the case ends
+
     uv run python examples/07_readonly_case_experiment/run.py
     uv run python examples/07_readonly_case_experiment/run.py --memory-only   # skip the model calls
     uv run python examples/07_readonly_case_experiment/run.py cleanup         # delete rooms a crashed run left open
@@ -78,6 +87,8 @@ def case_path(run_id: str, case: Case) -> str:
 
 def reader_keys() -> tuple[list[str], bool]:
     """One key per case for Agent B, and whether each case has its own account."""
+    # AMFS_API_KEYS_B_PER_CASE, if set, is "key1,key2,key3". Split it and drop
+    # spaces and empty items.
     per_case = [k.strip() for k in (os.environ.get("AMFS_API_KEYS_B_PER_CASE") or "").split(",") if k.strip()]
     if per_case:
         if len(per_case) < len(CASES):
@@ -85,8 +96,9 @@ def reader_keys() -> tuple[list[str], bool]:
                 f"AMFS_API_KEYS_B_PER_CASE has {len(per_case)} key(s) and there are {len(CASES)} cases. "
                 "Give one key per case, each from a different account, or remove the variable."
             )
+        # Case 1 uses the first key, case 2 the second, and so on.
         return per_case[: len(CASES)], True
-    # One reader account, reused for every case.
+    # Otherwise AMFS_API_KEY_B is the one reader account, reused for every case.
     return [second_key()] * len(CASES), False
 
 
@@ -108,12 +120,16 @@ def agent_a_writes(writer: AgentMemory, run_id: str, use_model: bool) -> None:
         else:
             # No model: store the grader's feedback as it is.
             rule = case.feedback
+        # Save it under this case's own path with the key "rule". The path is
+        # what the room will share and what B will retrieve on.
         entry = writer.write(case_path(run_id, case), "rule", rule, confidence=RULE_CONFIDENCE)
         print(f"  {case.id:<13} {entry_ref(entry)}")
 
 
 def agent_a_opens_room(writer: AgentMemory, path: str, run_id: str, case: Case) -> tuple[str, str]:
     """A room on this case's path, and a single-use viewer link to it."""
+    # The first argument is the topic: the one path the room shares. Nothing
+    # else in A's account becomes visible to the room's members.
     room = writer.room_create(
         path,
         name=f"POC case {case.id} ({run_id})",
@@ -133,14 +149,19 @@ def agent_a_opens_room(writer: AgentMemory, path: str, run_id: str, case: Case) 
 
 def agent_b_joins(api_key: str, token: str, room_id: str) -> str:
     """Redeeming admits B's user; joining places this agent in the room."""
+    # Connect as B, with B's key in place of AMFS_API_KEY.
     reader = hosted(READER_ID, api_key=api_key)
+    # Step 1: redeem the link. This makes B's user a member of the room with
+    # the role the link carries ("viewer"). It accepts the token or the whole URL.
     role = reader.room_redeem(token).get("role")
+    # Step 2: place this agent in the room, so its reads include the room's path.
     reader.room_join(room_id)
     return str(role)
 
 
 def describe(hit: ScoredEntry) -> dict:
     """One retrieved entry as it goes into the results file."""
+    # A hit is the stored entry plus the score retrieval gave it for this query.
     entry = hit.entry
     return {
         "entry": entry_ref(entry),
@@ -155,11 +176,14 @@ def describe(hit: ScoredEntry) -> dict:
 def write_is_refused(reader: AgentMemory, path: str) -> bool:
     """B tries one write to the case path. A viewer gets a 403 and nothing is saved."""
     try:
+        # An ordinary write, the same call A uses. Only the role differs.
         reader.write(path, "viewer-write-check", "Written by the read-only check in example 07.")
     except httpx.HTTPStatusError as exc:
+        # 403 with error "room_read_only" is the server refusing a viewer.
         if exc.response.status_code == 403:
             return True
-        raise
+        raise  # any other error is a real failure, so let it stop the run
+    # No error: the write was saved, which means B is not read-only.
     return False
 
 
@@ -167,28 +191,36 @@ def agent_b_reads(api_key: str, run_id: str, case: Case) -> tuple[AgentMemory, d
     """A fresh Agent B retrieves on the case's path, then checks what else it can reach."""
     reader = hosted(READER_ID, api_key=api_key)  # new object, new session
     path = case_path(run_id, case)
+    # The paths of the cases B has NOT been given, for the two checks below.
     other_paths = [case_path(run_id, other) for other in CASES if other.id != case.id]
 
-    # The retrieve B's answer is built from: this case's path only.
+    # The retrieve B's answer is built from. The task is the query, and
+    # entity_path limits the search to this case's path. The return value is
+    # the full record of what B retrieved; nothing else needs to be committed.
     hits = retrieve_until_found(reader, case.eval_task, entity_path=path, limit=RETRIEVE_LIMIT)
 
-    # The other cases exist in A's account. Ask for each by its exact path.
+    # Check 1: the other cases exist in A's account. Ask for each by its
+    # exact path. B is not in a room for them, so this should find nothing.
     visible_others = [
         entry_ref(hit.entry)
         for other in other_paths
         for hit in reader.retrieve(case.eval_task, entity_path=other, limit=RETRIEVE_LIMIT)
     ]
 
-    # Joining a room saves a briefing with the room's entries in B's OWN
-    # account, under <agent id>/briefings/rooms/<case path>, and it stays
-    # there. List which other cases B's account holds such a copy of.
+    # Check 2: joining a room saves a briefing with the room's entries in B's
+    # OWN account, under <agent id>/briefings/rooms/<case path>, and it stays
+    # there after the room is deleted. List which other cases B's account
+    # holds such a copy of. With one account per case this stays empty.
     copies = [
         other
         for other in other_paths
         if reader.search(entity_path=f"{READER_ID}/briefings/rooms/{other}", limit=1)
     ]
 
+    # Check 3: B tries to write to the case path and should be refused.
     refused = write_is_refused(reader, path) if CHECK_WRITE_IS_REFUSED else None
+    # "hits" are the SDK objects for the prompt; "retrieved" is the same list
+    # as plain data for the results file.
     return reader, {
         "hits": hits,
         "retrieved": [describe(hit) for hit in hits],
@@ -203,6 +235,7 @@ def agent_b_reads(api_key: str, run_id: str, case: Case) -> tuple[AgentMemory, d
 
 def control_arm(case: Case) -> dict:
     """No memory: this function is given no SenseLab object and no key."""
+    # The bare task goes to the model. Nothing from SenseLab is involved.
     answer = complete(SOLVER_SYSTEM, case.eval_task).text
     return {"answer": answer, "passed": case.check(answer)}
 
@@ -211,8 +244,10 @@ def treatment_arm(case: Case, hits: list[ScoredEntry]) -> dict:
     """The same task with the retrieved entries added to the prompt."""
     prompt = case.eval_task
     if hits:
+        # One bullet per retrieved entry, appended to the task.
         prompt += "\n\nNotes left by colleagues that may apply:\n" + as_notes(hits)
     answer = complete(SOLVER_SYSTEM, prompt).text
+    # Graded by the string-match checker in poc/cases.py, the same as the control.
     return {"answer": answer, "passed": case.check(answer)}
 
 
@@ -222,15 +257,21 @@ def treatment_arm(case: Case, hits: list[ScoredEntry]) -> dict:
 def run_case(writer: AgentMemory, api_key: str, run_id: str, case: Case, *, use_model: bool, own_account: bool) -> dict:
     """Open the room, let B read and answer, close the room, check it is closed."""
     path = case_path(run_id, case)
+    # Every check that fails adds a line here. The run exits with an error at
+    # the end if any case has one.
     problems: list[str] = []
     print(f"\ncase {case.id}")
 
+    # A's side: open the room and get the join link's token.
     room_id, token = agent_a_opens_room(writer, path, run_id, case)
     print(f"  A opened a room on {path}")
     try:
+        # B's side: join with the token. In a real setup A sends the link to
+        # B by another channel; here both sides run in one script.
         role = agent_b_joins(api_key, token, room_id)
         print(f"  B joined with role {role}")
 
+        # B retrieves, then the three checks run with B's key.
         reader, seen = agent_b_reads(api_key, run_id, case)
         hits = seen.pop("hits")
         print(f"  B retrieved               {[r['entry'] for r in seen['retrieved']] or 'nothing'}")
@@ -241,6 +282,8 @@ def run_case(writer: AgentMemory, api_key: str, run_id: str, case: Case, *, use_
         if seen["other_cases_visible"]:
             problems.append("B could retrieve another case by its path")
 
+        # With one reader account this is expected from the second case on,
+        # so it is only printed. With one account per case it is a failure.
         copies = seen["other_cases_copied_to_reader_account"]
         print(f"  briefings in B's account  {f'{len(copies)} earlier case(s)' if copies else 'no other case'}")
         if copies and own_account:
@@ -262,18 +305,21 @@ def run_case(writer: AgentMemory, api_key: str, run_id: str, case: Case, *, use_
         # is what ends B's access to this case.
         writer.room_delete(room_id)
 
-    # After the room is gone B gets nothing on the path, and A's entry is as A left it.
+    # After the room is gone, the same retrieve with B's key returns nothing.
     still_visible = reader.retrieve(case.eval_task, entity_path=path, limit=RETRIEVE_LIMIT)
     print(f"  room deleted; B retrieves {[entry_ref(h.entry) for h in still_visible] or 'nothing'}")
     if still_visible:
         problems.append("B could still retrieve the case after its room was deleted")
 
+    # Read the rule with A's key. B committed no outcome, so the confidence
+    # is still the value A wrote.
     rule = writer.read(path, "rule")
     unchanged = rule is not None and abs(rule.confidence - RULE_CONFIDENCE) < 1e-9
     print(f"  A's rule confidence       {rule.confidence if rule else 'missing'} ({'unchanged' if unchanged else 'CHANGED'})")
     if not unchanged:
         problems.append("A's rule changed while B had access")
 
+    # One row of the results file.
     return {
         "case": case.id,
         "path": path,
@@ -293,15 +339,21 @@ def _mark(arm: dict) -> str:
 
 
 def run(memory_only: bool) -> None:
+    # A new id per run, so every run writes under paths nobody has used.
     run_id = new_run_id()
+    # B's key for each case, and whether each case has its own account.
     keys, own_account = reader_keys()
+    # The model is used when a model key is set and --memory-only is not given.
     use_model = model_is_configured() and not memory_only
+    # Agent A, connected with AMFS_API_KEY.
     writer = hosted(WRITER_ID)
 
     print(f"run id: {run_id}")
     print(f"reader: {'one account per case' if own_account else 'one account for every case'}")
     print(f"model:  {'used for the rules and the task' if use_model else 'not used; memory steps only'}\n")
 
+    # A writes every rule first, then the cases run one after another, each
+    # with its own room and its own key for B.
     agent_a_writes(writer, run_id, use_model)
     rows = [
         run_case(writer, key, run_id, case, use_model=use_model, own_account=own_account)
@@ -320,6 +372,7 @@ def run(memory_only: bool) -> None:
         print(f"control {control_passed}/{len(rows)}   treatment {treatment_passed}/{len(rows)}")
     print(f"what B retrieved is in {out.relative_to(RESULTS_DIR.parent)}")
 
+    # Collect the failed checks from all cases and stop with an error if any.
     problems = [f"{row['case']}: {problem}" for row in rows for problem in row["problems"]]
     if problems:
         raise SystemExit("FAILED:\n  " + "\n  ".join(problems))
@@ -332,6 +385,8 @@ def run(memory_only: bool) -> None:
 def cleanup() -> None:
     """Delete rooms this example created and a failed run left behind."""
     writer = hosted(WRITER_ID)
+    # my_rooms lists the rooms A is in. Keep those whose topic starts with
+    # this example's prefix.
     mine = [
         room
         for room in writer.my_rooms()
@@ -349,6 +404,7 @@ def cleanup() -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    # "run" is the experiment. "cleanup" deletes rooms a crashed run left open.
     parser.add_argument("step", nargs="?", default="run", choices=["run", "cleanup"])
     parser.add_argument("--memory-only", action="store_true", help="skip the model calls even if a model key is set")
     args = parser.parse_args()
