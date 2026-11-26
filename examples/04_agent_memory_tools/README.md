@@ -2,20 +2,43 @@
 
 In example 01 the script retrieves from SenseLab and pastes the result into the prompt. Here the model gets two tools, `memory_search` and `memory_write`, and chooses when to call them. The result tells you whether the agent uses memory unprompted, as well as whether memory helps.
 
+## Before you run
+
+- Example 00 prints `Connected.`
+- `.env` has a key for a model that supports tool use: `ANTHROPIC_API_KEY`, or `OPENAI_API_KEY` together with `POC_MODEL`.
+
 ## Run
 
-Needs `AMFS_HTTP_URL`, `AMFS_API_KEY`, and a key for a model that supports tool use: `ANTHROPIC_API_KEY`, or `OPENAI_API_KEY` with `POC_MODEL`.
+From the repository root:
 
 ```bash
-uv run python examples/04_agent_memory_tools/run.py                    # all cases
+uv run python examples/04_agent_memory_tools/run.py                    # all three cases
 uv run python examples/04_agent_memory_tools/run.py --case label-date  # one case
 ```
 
-Each case runs four model conversations of a few turns each.
+The case ids are `invoice-ref`, `label-date` and `ticket-queue`. Each case runs four model conversations of a few turns each. Start with one case.
 
 ## Output
 
-This example has not been run end to end yet, so there is no sample here. For each case it prints Agent A's tool calls, then `PASS` or `FAIL` for Agent B with tools (and its tool calls) and for Agent B without tools. Full answers go to `results/`.
+This example has not been run end to end yet. The format below comes from the code, with placeholders in angle brackets.
+
+```
+run id: <run id>
+
+label-date
+  Agent A        ['memory_search({"query": "..."})', 'memory_write({"key": "...", "value": "..."})']
+  Agent B tools  <PASS or FAIL>  ['memory_search({"query": "..."})']
+  Agent B bare   <PASS or FAIL>
+
+full answers in results/04_agent_memory_tools-<run id>.json
+```
+
+How to read it:
+
+- The lists are the tool calls each agent made, in order. `made no tool calls` appears when there were none.
+- The handoff worked when Agent A called `memory_write`, Agent B called `memory_search`, and `Agent B tools` passed.
+- `Agent B bare` is the control: the same model with no tools.
+- If Agent B passes without calling `memory_search`, it guessed.
 
 ## How it works
 
@@ -27,17 +50,26 @@ This example has not been run end to end yet, so there is no sample here. For ea
 
 ## Edit
 
-- `TOOLS`: the names, descriptions and schemas the model sees. The descriptions have the most effect on how often the tools are called.
-- `SYSTEM`: the only place the prompt mentions shared memory. Try removing that mention.
-- `MAX_STEPS`, `SEARCH_LIMIT`: loop and retrieval limits.
+In the `CUSTOMIZE` block at the top of `run.py`:
+
+| Setting | Meaning |
+| --- | --- |
+| `WRITER_ID`, `SOLVER_ID` | agent names |
+| `PATH_PREFIX` | entries go under `<prefix>/<run id>/<case id>` |
+| `MAX_STEPS` | how many model turns one attempt may take |
+| `SEARCH_LIMIT` | how many entries `memory_search` returns |
+| `TOOLS` | the names, descriptions and schemas the model sees. The descriptions have the most effect on how often the tools are called |
+| `SYSTEM` | the prompt with tools. It is the only place shared memory is mentioned. Try removing that mention |
+| `SYSTEM_NO_TOOLS` | the prompt for the control arm |
 
 ## Adapt
 
-To add your own tool, append it to `TOOLS` and add a handler with the same name to the dict that `memory_tools` returns. If your agent framework has its own tool loop, keep the two handlers and drop `run_with_tools`.
+- Your own tool: append it to `TOOLS` and add a handler with the same name to the dict that `memory_tools` returns.
+- Your own agent framework: keep the two handlers in `memory_tools`, register them as tools in your framework, and drop `run_with_tools`.
+- Your own tasks: edit `CASES` in `poc/cases.py`.
 
 ## Gotchas
 
 - The model may never write or never search. Read the printed tool calls before the pass rates.
-- If Agent B passes without calling `memory_search`, it guessed.
 - Keep `entity_path` in the handler. If the model chooses the path, one case can read another's rule.
 - The model chooses the keys, so two runs can save the same rule under different keys. Find entries with `retrieve`; a lookup by fixed key will miss them.

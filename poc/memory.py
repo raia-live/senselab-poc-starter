@@ -23,6 +23,8 @@ def hosted(agent_id: str, api_key: str | None = None) -> AgentMemory:
     on the server.
     """
     try:
+        # agent_id is the name shown in the dashboard. api_key, when given,
+        # replaces AMFS_API_KEY (example 05 uses it for the guest).
         return AgentMemory.from_env(agent_id, api_key=api_key)
     except ValueError as exc:
         raise SystemExit(f"{exc}\nCopy .env.example to .env and fill it in.") from exc
@@ -45,7 +47,7 @@ def new_run_id() -> str:
     There is no delete, so "reset" means "use a path nobody has written to".
     Every example puts its entries under a path that contains this id.
     """
-    return secrets.token_hex(4)
+    return secrets.token_hex(4)  # eight hex characters, e.g. "02a2573d"
 
 
 def entry_ref(entry: MemoryEntry) -> str:
@@ -71,7 +73,10 @@ def retrieve_until_found(
     """
     deadline = time.monotonic() + timeout
     while True:
+        # entity_path limits the search to one exact path. limit caps the
+        # number of entries returned.
         hits = mem.retrieve(query, entity_path=entity_path, limit=limit)
+        # Stop as soon as something comes back, or when the time is up.
         if hits or time.monotonic() >= deadline:
             return hits
         time.sleep(interval)

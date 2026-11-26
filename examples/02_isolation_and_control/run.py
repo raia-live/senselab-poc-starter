@@ -30,17 +30,25 @@ QUERY = "How do I write a date on a shipping label?"
 # ────────────────────────────────────────────────────────────────────────────
 
 
+# ── Step 1: write one rule per case ───────────────────────────────────────────
+
+
 def write_rules(run_id: str) -> None:
     """One rule under each case's own path."""
     writer = hosted(WRITER_ID)
     for case, rule in RULES.items():
+        # The path ends with the case name, so the two rules live apart.
         entry = writer.write(f"{PATH_PREFIX}/{run_id}/{case}", "rule", rule, confidence=0.9)
         print(f"wrote {entry_ref(entry)}")
     print()
 
 
 def show(label: str, expectation: str, refs: list[str]) -> None:
+    """Print one retrieve: what was asked, what should come back, what did."""
     print(f"{label}\n  expected: {expectation}\n  got:      {refs or 'nothing'}\n")
+
+
+# ── Step 2: the same question with three different scopes ─────────────────────
 
 
 def retrieve_three_ways(run_id: str) -> None:
@@ -74,8 +82,12 @@ def retrieve_three_ways(run_id: str) -> None:
     )
 
 
+# ── Step 3: a reset is a new run id ───────────────────────────────────────────
+
+
 def a_new_run_is_empty() -> None:
     """There is no delete. A reset is a path nobody has written to."""
+    # Same case name, new run id: a path with no entries.
     fresh = f"{PATH_PREFIX}/{new_run_id()}/case-2"
     hits = hosted(READER_ID).retrieve(QUERY, entity_path=fresh, limit=5)
     show(
@@ -83,6 +95,9 @@ def a_new_run_is_empty() -> None:
         "nothing: this is what a clean slate looks like",
         [entry_ref(h.entry) for h in hits],
     )
+
+
+# ── Entry point ───────────────────────────────────────────────────────────────
 
 
 def main() -> None:

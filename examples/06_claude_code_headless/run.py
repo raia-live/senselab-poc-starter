@@ -73,6 +73,9 @@ Task: {task}
 # ────────────────────────────────────────────────────────────────────────────
 
 
+# ── Running Claude Code ───────────────────────────────────────────────────────
+
+
 def mcp_config(agent_id: str | None) -> str:
     """The --mcp-config value: the SenseLab server, or no servers at all.
 
@@ -81,8 +84,11 @@ def mcp_config(agent_id: str | None) -> str:
     environment so the key stays off the command line. This expansion is
     untested; if the server fails to authenticate, put the values in directly.
     """
+    # Control arm: an empty server list, so Claude Code has no SenseLab tools.
     if agent_id is None:
         return json.dumps({"mcpServers": {}})
+    # Treatment arm: start the SenseLab MCP server with uvx and tell it which
+    # service, key and agent id to use.
     return json.dumps(
         {
             "mcpServers": {
@@ -120,6 +126,7 @@ def claude(prompt: str, *, agent_id: str | None, allowed_tool: str | None) -> di
         mcp_config(agent_id),
         "--no-session-persistence",
     ]
+    # Let this run call one SenseLab tool without asking for permission.
     if allowed_tool:
         command += ["--allowedTools", allowed_tool]
     if CLAUDE_MODEL:
@@ -130,12 +137,17 @@ def claude(prompt: str, *, agent_id: str | None, allowed_tool: str | None) -> di
         done = subprocess.run(
             command, cwd=workdir, env=os.environ.copy(), capture_output=True, text=True, timeout=TIMEOUT, check=False
         )
+    # Stop on a failed process, then on an error reported inside the JSON.
     if done.returncode != 0:
         raise SystemExit(f"FAILED: claude exited {done.returncode}\n{done.stderr.strip() or done.stdout.strip()}")
     result = json.loads(done.stdout)
     if result.get("is_error"):
         raise SystemExit(f"FAILED: claude reported an error: {result.get('result')}")
+    # result["result"] is Claude Code's final message as text.
     return result
+
+
+# ── The three roles ───────────────────────────────────────────────────────────
 
 
 def agent_a_writes(case: Case, path: str) -> None:
@@ -150,6 +162,7 @@ def agent_a_writes(case: Case, path: str) -> None:
 
 def read_back_with_sdk(path: str) -> None:
     """The entry Claude Code wrote, read with the Python SDK."""
+    # A plain SDK read of the path and key the prompt told Claude Code to use.
     entry = hosted("poc-solver").read(path, "rule")
     if entry is None:
         raise SystemExit(
@@ -161,6 +174,8 @@ def read_back_with_sdk(path: str) -> None:
 
 def agent_b(case: Case, path: str, *, with_memory: bool) -> bool:
     """A new Claude Code run on a new instance of the task."""
+    # Treatment: the MCP server is loaded and amfs_retrieve is allowed.
+    # Control: no MCP server and no tools.
     if with_memory:
         result = claude(
             SOLVER_PROMPT_WITH_MEMORY.format(task=case.eval_task, path=path),
@@ -169,6 +184,7 @@ def agent_b(case: Case, path: str, *, with_memory: bool) -> bool:
         )
     else:
         result = claude(SOLVER_PROMPT_CONTROL.format(task=case.eval_task), agent_id=None, allowed_tool=None)
+    # Grade Claude Code's final message with the checker in poc/cases.py.
     passed = case.check(result["result"])
     arm = "treatment (MCP server)" if with_memory else "control (no MCP server)"
     print(f"Agent B {arm:<24} {'PASS' if passed else 'FAIL'}  answered: {_last_line(result['result'])}")
@@ -180,11 +196,15 @@ def _last_line(text: str) -> str:
     return lines[-1] if lines else "(no output)"
 
 
+# ── Command line ──────────────────────────────────────────────────────────────
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--case", default=CASE_ID, help="a case id from poc/cases.py")
     args = parser.parse_args()
 
+    # Fail early, with a clear message, if a program or variable is missing.
     for tool in ("claude", "uvx"):
         if shutil.which(tool) is None:
             raise SystemExit(f"FAILED: `{tool}` is not on PATH.")
@@ -197,6 +217,8 @@ def main() -> None:
     path = f"{PATH_PREFIX}/{run_id}/{case.id}"
     print(f"run id: {run_id}\n")
 
+    # 1. Agent A saves the rule through MCP. 2. The SDK reads it back.
+    # 3. Agent B without memory. 4. Agent B with memory.
     agent_a_writes(case, path)
     read_back_with_sdk(path)
     agent_b(case, path, with_memory=False)

@@ -4,36 +4,101 @@ Seven runnable examples for a first SenseLab memory experiment. One agent learns
 
 Each example is a folder with a `run.py` and a `README.md`. The only shared code is three small modules in `poc/`.
 
+## What you need
+
+- Python 3.11 or later.
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) to install dependencies and run the scripts. `pip` works too (see step 2).
+- A SenseLab account and an API key (step 3).
+- For examples 01, 03, 04 and 06: a model API key from Anthropic or OpenAI.
+- For example 05: a second SenseLab API key from a different account.
+- For example 06: the Claude Code CLI.
+
 ## Setup
 
-```bash
-git clone https://github.com/raia-live/senselab-poc-starter.git
-cd senselab-poc-starter
-cp .env.example .env    # add your AMFS_API_KEY
-uv run python examples/00_preflight/run.py
-```
+1. Clone the repository.
 
-Without `uv`: `python -m venv .venv && source .venv/bin/activate && pip install -e .`, then run the scripts with `python`. Python 3.11 or later.
+   ```bash
+   git clone https://github.com/raia-live/senselab-poc-starter.git
+   cd senselab-poc-starter
+   ```
 
-API keys are created in the SenseLab dashboard under Settings, API Keys. Once preflight prints `Connected.`, the other examples can run.
+2. Install the dependencies. With `uv` there is nothing to do: `uv run` installs them on first use. With `pip`:
+
+   ```bash
+   python -m venv .venv && source .venv/bin/activate
+   pip install -e .
+   ```
+
+   If you use `pip`, replace `uv run python` with `python` in every command below.
+
+3. Create a SenseLab API key. Sign in at https://amfs.sense-lab.ai (new accounts confirm their email first), open Settings, then API Keys, and create a key of type Agent. Copy it when it is shown. It starts with `amfs_`.
+
+4. Create your `.env` file and paste the key into it.
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   ```bash
+   # .env
+   AMFS_HTTP_URL=https://amfs-login.sense-lab.ai
+   AMFS_API_KEY=amfs_your_key_here
+   ```
+
+5. Check the connection.
+
+   ```bash
+   uv run python examples/00_preflight/run.py
+   ```
+
+   The last line should start with `Connected.` If it does not, see [Troubleshooting](#troubleshooting).
+
+Run every command from the repository root. Each script loads `.env` when it starts. A variable already set in your shell takes precedence over the file.
+
+## Environment variables
+
+All of them go in `.env`. `.env.example` lists them with comments.
+
+| Variable | Needed for | Value |
+| --- | --- | --- |
+| `AMFS_HTTP_URL` | all examples | `https://amfs-login.sense-lab.ai` (already in `.env.example`) |
+| `AMFS_API_KEY` | all examples | your SenseLab API key |
+| `AMFS_API_KEY_B` | 05, and optionally 00 | a second SenseLab key from a different user or account |
+| `ANTHROPIC_API_KEY` | 01, 03, 04, 06 | an Anthropic API key. 06 works only with this one |
+| `OPENAI_API_KEY` | 01, 03, 04 | use in place of the Anthropic key. Also set `POC_MODEL` |
+| `POC_MODEL` | 01, 03, 04 | model name. Optional with Anthropic (default `claude-sonnet-5-5`), required with OpenAI |
+
+If both model keys are set, Anthropic is used.
 
 ## Examples
 
-| Example | Shows | Needs | Run on hosted SenseLab |
-| --- | --- | --- | --- |
-| [00_preflight](examples/00_preflight) | The SDK reaches the hosted service with your key | SenseLab key | yes |
-| [01_memory_handoff](examples/01_memory_handoff) | Agent A saves a rule; Agent B is graded with and without it | SenseLab key, model key | not yet |
-| [02_isolation_and_control](examples/02_isolation_and_control) | Keeping test cases apart, and what a reset is | SenseLab key | yes |
-| [03_inspect_traces](examples/03_inspect_traces) | What a trace stores by default and what you have to pass | SenseLab key, model key | not yet |
-| [04_agent_memory_tools](examples/04_agent_memory_tools) | The model searches and writes memory itself, through tools | SenseLab key, model key | not yet |
-| [05_room_two_keys](examples/05_room_two_keys) | Two agents on different API keys share memory and messages through a room | Two SenseLab keys | yes |
-| [06_claude_code_headless](examples/06_claude_code_headless) | The handoff experiment with headless Claude Code | SenseLab key, Anthropic key, `claude` CLI | not yet |
+Run them in order. Every command accepts `--help`.
 
-The READMEs for 00, 02 and 05 show real output. The four examples that call a model have not been run end to end yet, so their READMEs describe the output without a sample.
+| Example | Shows | Command | Run on hosted SenseLab |
+| --- | --- | --- | --- |
+| [00_preflight](examples/00_preflight) | The SDK reaches the hosted service with your key | `uv run python examples/00_preflight/run.py` | yes |
+| [01_memory_handoff](examples/01_memory_handoff) | Agent A saves a rule; Agent B is graded with and without it | `uv run python examples/01_memory_handoff/run.py` | not yet |
+| [02_isolation_and_control](examples/02_isolation_and_control) | Keeping test cases apart, and what a reset is | `uv run python examples/02_isolation_and_control/run.py` | yes |
+| [03_inspect_traces](examples/03_inspect_traces) | What a trace stores by default and what you have to pass | `uv run python examples/03_inspect_traces/run.py` | not yet |
+| [04_agent_memory_tools](examples/04_agent_memory_tools) | The model searches and writes memory itself, through tools | `uv run python examples/04_agent_memory_tools/run.py` | not yet |
+| [05_room_two_keys](examples/05_room_two_keys) | Two agents on different API keys share memory and messages through a room | `uv run python examples/05_room_two_keys/run.py` | yes |
+| [06_claude_code_headless](examples/06_claude_code_headless) | The handoff experiment with headless Claude Code | `uv run python examples/06_claude_code_headless/run.py` | not yet |
+
+The READMEs for 00, 02 and 05 show real output. The four examples that call a model have not been run end to end yet. Their READMEs show the output format with placeholders.
+
+Each example README has the same sections: what it needs, how to run it, the output and how to read it, how the code works, what to edit, how to adapt it, and known gotchas.
 
 ## Connecting
 
 Use `AgentMemory.from_env(agent_id)`. The examples call it through `poc.memory.hosted()`.
+
+```python
+from amfs import AgentMemory
+
+mem = AgentMemory.from_env("my-agent")                # reads AMFS_HTTP_URL and AMFS_API_KEY
+mem.write("my-experiment/run-1/case-1", "rule", "Dates are written DDMMMYY.")
+hits = mem.retrieve("How do I write a date?", entity_path="my-experiment/run-1/case-1")
+```
 
 `AgentMemory(agent_id)` with no adapter ignores `AMFS_HTTP_URL` and `AMFS_API_KEY` and stores entries in a local `.amfs/` folder. The script runs without error and nothing appears in your dashboard.
 
@@ -57,9 +122,25 @@ Claude Code connects through the SenseLab MCP server, and the Python SDK is not 
 
 ## Adapting the examples
 
-- Each `run.py` starts with a `CUSTOMIZE` block holding its agent ids, paths, prompts and limits.
-- `poc/cases.py` holds the three test cases. Replace them with your own tasks and expected answers.
-- `poc/llm.py` is the model client. It uses Anthropic when `ANTHROPIC_API_KEY` is set, otherwise OpenAI with `OPENAI_API_KEY` and `POC_MODEL`. To plug in your own agent, replace `complete()` and `run_with_tools()`.
-- `poc/memory.py` holds the connection helper.
+| File | What it holds | Change it to |
+| --- | --- | --- |
+| `examples/*/run.py`, `CUSTOMIZE` block | agent ids, paths, prompts, limits | rename agents, move entries, reword prompts |
+| `poc/cases.py` | three test cases with expected answers | use your own tasks |
+| `poc/llm.py` | the model client: `complete()` and `run_with_tools()` | call your own agent or another provider |
+| `poc/memory.py` | `hosted()`, `new_run_id()`, `retrieve_until_found()` | change how runs are named or how long a retrieve waits |
 
 Every run writes under a path containing a new run id, so runs do not collide. Old entries stay in your account. Results are written to `results/`, which is gitignored.
+
+## Troubleshooting
+
+| Message | Cause | Fix |
+| --- | --- | --- |
+| `Copy .env.example to .env and fill it in.` | `AMFS_HTTP_URL` or `AMFS_API_KEY` is missing | create `.env` (setup step 4) |
+| `FAILED: ... 401 ...` | the SenseLab key is wrong or revoked | create a new key and update `.env` |
+| `FAILED: could not reach ...` | wrong `AMFS_HTTP_URL`, or no network | use the URL from `.env.example` |
+| `Set ANTHROPIC_API_KEY or OPENAI_API_KEY in .env` | no model key | add one |
+| `Set POC_MODEL in .env` | OpenAI key without a model name | add `POC_MODEL` |
+| `AMFS_API_KEY_B is not set` | example 05 needs a second key | see the [05 README](examples/05_room_two_keys) |
+| `FAILED: ... 402 ...` in example 05 | a room from an earlier run is still open | `uv run python examples/05_room_two_keys/run.py cleanup` |
+| ``FAILED: `claude` is not on PATH.`` | Claude Code is not installed | see the [06 README](examples/06_claude_code_headless) |
+| a `.amfs/` folder appears | a script built `AgentMemory(...)` without `from_env` | use `AgentMemory.from_env(...)` and delete the folder |

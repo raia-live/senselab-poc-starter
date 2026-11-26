@@ -74,6 +74,9 @@ SYSTEM_NO_TOOLS = (
 # ────────────────────────────────────────────────────────────────────────────
 
 
+# ── The code behind the two tools ─────────────────────────────────────────────
+
+
 def memory_tools(mem: AgentMemory, path: str) -> dict:
     """The tool handlers for one agent on one case.
 
@@ -82,23 +85,33 @@ def memory_tools(mem: AgentMemory, path: str) -> dict:
     """
 
     def memory_search(query: str) -> str:
+        # Runs when the model calls memory_search. The returned text is what
+        # the model sees as the tool result.
         hits = mem.retrieve(query, entity_path=path, limit=SEARCH_LIMIT)
         if not hits:
             return "No results."
         return json.dumps([{"key": h.entry.key, "value": h.entry.value} for h in hits])
 
     def memory_write(key: str, value: str) -> str:
+        # Runs when the model calls memory_write.
         mem.write(path, key, value, confidence=0.8)
         return f"Saved as {key}."
 
+    # The dict keys must match the tool names in TOOLS.
     return {"memory_search": memory_search, "memory_write": memory_write}
+
+
+# ── Agent A: attempt the task, then react to the feedback ─────────────────────
 
 
 def agent_a(case: Case, path: str) -> dict:
     """Agent A attempts the task, is told why it was wrong, and may save a rule."""
     mem = hosted(WRITER_ID)
     handlers = memory_tools(mem, path)
+    # Conversation 1: the model attempts the task with both tools available.
     attempt = run_with_tools(SYSTEM, case.teach_task, TOOLS, handlers, max_steps=MAX_STEPS)
+    # Conversation 2: it sees its answer and the grader's feedback. Nothing
+    # tells it to save a rule; whether it calls memory_write is its decision.
     debrief = run_with_tools(
         SYSTEM,
         f"Earlier you were given this task:\n{case.teach_task}\n\n"
@@ -112,8 +125,13 @@ def agent_a(case: Case, path: str) -> dict:
     return {"calls": _calls(attempt) + _calls(debrief), "wrote": _names(debrief).count("memory_write")}
 
 
+# ── Agent B: a new session, with tools and without ────────────────────────────
+
+
 def agent_b_with_tools(case: Case, path: str) -> dict:
     """A fresh Agent B on a new instance of the task, with the same tools."""
+    # A new memory object and a new conversation. The only way the rule can
+    # reach this agent is a memory_search call.
     mem = hosted(SOLVER_ID)
     run = run_with_tools(SYSTEM, case.eval_task, TOOLS, memory_tools(mem, path), max_steps=MAX_STEPS)
     return {"calls": _calls(run), "answer": run.text, "passed": case.check(run.text)}
@@ -134,6 +152,9 @@ def _calls(run: ToolRun) -> list[str]:
     return [f"{c['name']}({json.dumps(c['input'])[:80]})" for c in run.calls]
 
 
+# ── Command line ──────────────────────────────────────────────────────────────
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--case", help="run one case from poc/cases.py instead of all of them")
@@ -144,6 +165,7 @@ def main() -> None:
     print(f"run id: {run_id}\n")
     rows = []
     for case in cases:
+        # One path per case. All three agents below are tied to it.
         path = f"{PATH_PREFIX}/{run_id}/{case.id}"
         a = agent_a(case, path)
         b = agent_b_with_tools(case, path)
@@ -155,6 +177,7 @@ def main() -> None:
         print(f"  Agent B tools  {'PASS' if b['passed'] else 'FAIL'}  {b['calls'] or 'made no tool calls'}")
         print(f"  Agent B bare   {'PASS' if control['passed'] else 'FAIL'}\n")
 
+    # Keep the full answers and tool calls for later inspection.
     RESULTS_DIR.mkdir(exist_ok=True)
     out = RESULTS_DIR / f"04_agent_memory_tools-{run_id}.json"
     out.write_text(json.dumps({"run_id": run_id, "cases": rows}, indent=2))

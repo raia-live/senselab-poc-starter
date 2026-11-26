@@ -56,7 +56,11 @@ DISTIL_SYSTEM = (
 
 
 def case_path(run_id: str, case: Case) -> str:
+    """The one path a case's rule is written to and retrieved from."""
     return f"{PATH_PREFIX}/{run_id}/{case.id}"
+
+
+# ── Agent A: learn the rule and save it ───────────────────────────────────────
 
 
 def agent_a_writes(run_id: str) -> None:
@@ -64,18 +68,27 @@ def agent_a_writes(run_id: str) -> None:
     writer = hosted(WRITER_ID)
     print(f"Agent A ({writer.agent_id}) writes one rule per case\n")
     for case in CASES:
+        # Ask the model to turn the grader's feedback into one general rule.
         rule = complete(
             DISTIL_SYSTEM,
             f"Task: {case.teach_task}\nGrader's feedback: {case.feedback}",
         ).text
+        # Save it under this case's path with the key "rule".
         entry = writer.write(case_path(run_id, case), "rule", rule, confidence=RULE_CONFIDENCE)
         print(f"  {case.id}: saved {entry_ref(entry)}\n    {rule}\n")
 
 
+# ── Agent B, control arm: no memory ───────────────────────────────────────────
+
+
 def agent_b_control(case: Case) -> dict:
     """Agent B with no memory: no SenseLab object is created at all."""
+    # The task goes to the model as it is. Nothing from SenseLab is involved.
     answer = complete(SOLVER_SYSTEM, case.eval_task).text
     return {"answer": answer, "passed": case.check(answer)}
+
+
+# ── Agent B, treatment arm: retrieve first ────────────────────────────────────
 
 
 def agent_b_treatment(run_id: str, case: Case) -> dict:
@@ -83,14 +96,20 @@ def agent_b_treatment(run_id: str, case: Case) -> dict:
     solver = hosted(SOLVER_ID)  # new object, new session: nothing carried over
     path = case_path(run_id, case)
 
+    # Search this case's path only, using the task as the query. Scoping to
+    # the path keeps other cases and other runs out.
     hits = retrieve_until_found(solver, case.eval_task, entity_path=path, limit=RETRIEVE_LIMIT)
+    # Add what was found to the prompt. With no hits the prompt is the bare task.
     prompt = case.eval_task
     if hits:
         prompt += "\n\nNotes left by colleagues that may apply:\n" + as_notes(hits)
     answer = complete(SOLVER_SYSTEM, prompt).text
+    # Grade with the string-match checker in poc/cases.py.
     passed = case.check(answer)
 
     # Seal a trace of what this session read and how it turned out.
+    # causal_entry_keys names the entries the outcome is applied to; an empty
+    # list records the outcome and leaves every entry's confidence unchanged.
     solver.commit_outcome(
         f"poc-handoff-{run_id}-{case.id}",
         OutcomeType.SUCCESS if passed else OutcomeType.FAILURE,
@@ -106,6 +125,9 @@ def agent_b_treatment(run_id: str, case: Case) -> dict:
         "passed": passed,
         "retrieved": [entry_ref(h.entry) for h in hits],
     }
+
+
+# ── Run both arms for every case and report ───────────────────────────────────
 
 
 def evaluate(run_id: str) -> None:
@@ -125,6 +147,7 @@ def evaluate(run_id: str) -> None:
     treatment_passed = sum(row["treatment"]["passed"] for row in rows)
     print(f"\n  control {control_passed}/{len(rows)}   treatment {treatment_passed}/{len(rows)}")
 
+    # Keep every answer, so a failed case can be inspected afterwards.
     RESULTS_DIR.mkdir(exist_ok=True)
     out = RESULTS_DIR / f"01_memory_handoff-{run_id}.json"
     out.write_text(json.dumps({"run_id": run_id, "cases": rows}, indent=2))
@@ -135,14 +158,20 @@ def _mark(arm: dict) -> str:
     return "PASS" if arm["passed"] else "FAIL"
 
 
+# ── Command line ──────────────────────────────────────────────────────────────
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    # "all" runs both halves. "write" and "eval" run one half each.
     parser.add_argument("step", nargs="?", default="all", choices=["all", "write", "eval"])
     parser.add_argument("--run-id", help="reuse an id to evaluate against rules written earlier")
     args = parser.parse_args()
     if args.step == "eval" and not args.run_id:
         parser.error("eval needs --run-id: the id that 'write' printed")
 
+    # A given --run-id lets "eval" read what an earlier "write" saved.
+    # Without one, a new id gives this run an empty set of paths.
     run_id = args.run_id or new_run_id()
     print(f"run id: {run_id}\n")
     if args.step in ("all", "write"):

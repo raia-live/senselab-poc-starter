@@ -2,20 +2,45 @@
 
 The experiment from example 01 with Claude Code as the agent. Claude Code reaches SenseLab through the SenseLab MCP server, and the entries it writes are the same ones the Python SDK reads. The control arm is Claude Code with no MCP server.
 
+## Before you run
+
+- Example 00 prints `Connected.`
+- `.env` has `ANTHROPIC_API_KEY`. An OpenAI key does not work here.
+- The Claude Code CLI is installed: `npm install -g @anthropic-ai/claude-code`. Check with `claude --version`.
+- `uvx` is installed. It comes with `uv`. Check with `uvx --version`.
+
 ## Run
 
-Needs `AMFS_HTTP_URL`, `AMFS_API_KEY` and `ANTHROPIC_API_KEY` in `.env`, plus the `claude` CLI and `uvx` on your `PATH`.
+From the repository root:
 
 ```bash
-uv run python examples/06_claude_code_headless/run.py
-uv run python examples/06_claude_code_headless/run.py --case invoice-ref
+uv run python examples/06_claude_code_headless/run.py                     # the label-date case
+uv run python examples/06_claude_code_headless/run.py --case invoice-ref  # another case
 ```
 
-One case is three `claude -p` runs. The first run downloads the MCP server.
+One case is three `claude -p` runs. The first run downloads the MCP server, so allow a few minutes.
 
 ## Output
 
-This example has not been run yet, so there is no sample here. It prints four results: Agent A saving the rule, the Python SDK reading that rule back, Agent B's control run, and Agent B's treatment run.
+This example has not been run yet. The format below comes from the code, with placeholders in angle brackets.
+
+```
+run id: <run id>
+
+Agent A (Claude Code + MCP): saved  [<n> turns]
+Python SDK reads poc/claude-code/<run id>/label-date/rule:
+  <the rule Claude Code wrote>
+  written by poc-claude-writer
+
+Agent B control (no MCP server)  <PASS or FAIL>  answered: <last line of the answer>
+Agent B treatment (MCP server)   <PASS or FAIL>  answered: <last line of the answer>
+```
+
+How to read it:
+
+- `Python SDK reads ...` confirms that the entry Claude Code wrote through MCP is visible to the Python SDK.
+- The handoff worked when treatment passes and control fails.
+- `FAILED: nothing at .../rule` means Claude Code did not call `amfs_write`, or used another path or key.
 
 ## How it works
 
@@ -31,14 +56,26 @@ This example has not been run yet, so there is no sample here. It prints four re
 
 ## Edit
 
-- `WRITER_PROMPT`, `SOLVER_PROMPT_WITH_MEMORY`, `SOLVER_PROMPT_CONTROL`: the prompts. The treatment prompt tells Claude Code to retrieve. Remove that sentence to test whether it retrieves unprompted.
-- `WRITE_TOOL`, `RETRIEVE_TOOL`: the SenseLab tools a run may call.
-- `CLAUDE_MODEL`: pin a model.
-- `WRITER_ID`, `SOLVER_ID`: the agent ids the MCP server reports.
+In the `CUSTOMIZE` block at the top of `run.py`:
+
+| Setting | Meaning |
+| --- | --- |
+| `CASE_ID` | the default case from `poc/cases.py` |
+| `PATH_PREFIX` | entries go under `<prefix>/<run id>/<case id>` |
+| `WRITER_ID`, `SOLVER_ID` | the agent ids the MCP server reports to SenseLab |
+| `CLAUDE_MODEL` | `None` uses Claude Code's default model. Set a model name to pin one |
+| `MCP_NAME` | the server name. Tool names are `mcp__<name>__<tool>` |
+| `WRITE_TOOL`, `RETRIEVE_TOOL` | the SenseLab tools a run may call |
+| `TIMEOUT` | seconds one `claude -p` run may take |
+| `WRITER_PROMPT`, `SOLVER_PROMPT_WITH_MEMORY`, `SOLVER_PROMPT_CONTROL` | the prompts |
+
+The treatment prompt tells Claude Code to retrieve. Remove that sentence to test whether it retrieves unprompted.
 
 ## Adapt
 
-To use a different MCP transport, change what `mcp_config` returns. To let Claude Code use more SenseLab tools, pass a longer list to `--allowedTools` in `claude`.
+- A different MCP transport: change what `mcp_config` returns.
+- More SenseLab tools: pass a longer list to `--allowedTools` in `claude`.
+- Your own Claude Code setup: remove `--bare` and `--tools ""` to run with your normal configuration. The control arm then stops being a clean comparison (see Gotchas).
 
 ## Gotchas
 

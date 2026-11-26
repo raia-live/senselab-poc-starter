@@ -2,13 +2,20 @@
 
 Shows how to stop one test case's memory from reaching another, and how to reset when entries cannot be deleted.
 
+## Before you run
+
+- Example 00 prints `Connected.`
+- No model key is needed.
+
 ## Run
 
-Needs `AMFS_HTTP_URL` and `AMFS_API_KEY` in `.env`. No model key.
+From the repository root:
 
 ```bash
 uv run python examples/02_isolation_and_control/run.py
 ```
+
+It makes 2 writes and 4 retrieves.
 
 ## Output
 
@@ -35,7 +42,13 @@ retrieve(entity_path='poc/isolation/b172f90a/case-2')  <- a new run id
   got:      nothing
 ```
 
-In the third block, the retrieve without `entity_path` returned a rule from an earlier run, rules written by two other examples, and an unrelated entry. Yours will list whatever else is in your account.
+How to read it:
+
+- Each block is one retrieve. `expected` says what should come back and `got` says what did.
+- Block 1 is the form to use in an experiment: scoped to one case, it returns that case only.
+- Block 2 shows that a parent path does not include its children.
+- Block 3 shows the leak. Without `entity_path`, the retrieve returned a rule from an earlier run, rules written by two other examples, and an unrelated entry. Yours will list whatever else is in your account.
+- Block 4 shows a reset: a new run id has no entries.
 
 ## How it works
 
@@ -51,11 +64,25 @@ For an experiment this means:
 
 ## Edit
 
-`PATH_PREFIX` sets the path scheme, `RULES` holds one rule per case, and `QUERY` is the question asked each time.
+In the `CUSTOMIZE` block at the top of `run.py`:
+
+| Setting | Meaning |
+| --- | --- |
+| `WRITER_ID`, `READER_ID` | agent names |
+| `PATH_PREFIX` | entries go under `<prefix>/<run id>/<case>` |
+| `RULES` | one rule per case. Add a case by adding an entry |
+| `QUERY` | the question asked in every retrieve |
 
 ## Adapt
 
-Use the same path scheme in your own harness: `<experiment>/<run id>/<case id>`. Generate the run id once per run, as `poc.memory.new_run_id()` does.
+Use the same path scheme in your own harness: `<experiment>/<run id>/<case id>`. Generate the run id once per run, as `poc.memory.new_run_id()` does, and build every path from it.
+
+```python
+run_id = new_run_id()
+path = f"my-experiment/{run_id}/{case_id}"
+mem.write(path, "rule", rule)
+hits = mem.retrieve(question, entity_path=path)   # always pass entity_path
+```
 
 ## Gotchas
 

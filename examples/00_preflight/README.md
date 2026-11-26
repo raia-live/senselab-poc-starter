@@ -2,13 +2,21 @@
 
 Writes one entry to hosted SenseLab and reads it back. Run it before the other examples to confirm that your key works and that the SDK is using the hosted service.
 
+## Before you run
+
+- `.env` exists in the repository root with `AMFS_HTTP_URL` and `AMFS_API_KEY` (see the [setup steps](../../README.md#setup)).
+- No model key is needed.
+- Optional: `AMFS_API_KEY_B`, to check the second key that example 05 uses.
+
 ## Run
 
-Needs `AMFS_HTTP_URL` and `AMFS_API_KEY` in `.env`. No model key.
+From the repository root:
 
 ```bash
 uv run python examples/00_preflight/run.py
 ```
+
+It makes one write and one read, and takes a few seconds.
 
 ## Output
 
@@ -23,7 +31,13 @@ second key  not set (only example 05 needs it)
 Connected. The entry is in your dashboard under poc/preflight/5983d3dc
 ```
 
-The session id and path suffix change on every run. With `AMFS_API_KEY_B` set to a key from another account, the `second key` line reads `ok, and it cannot see the first key's entry: ready for example 05`.
+How to read it:
+
+- `service` is the host from `AMFS_HTTP_URL`. It should be the hosted service.
+- `wrote` and `read back ok` mean the key can write and read.
+- `Connected.` means every check passed.
+- The session id and the path suffix change on every run.
+- With `AMFS_API_KEY_B` set to a key from another account, the `second key` line reads `ok, and it cannot see the first key's entry: ready for example 05`.
 
 ## How it works
 
@@ -33,7 +47,13 @@ The session id and path suffix change on every run. With `AMFS_API_KEY_B` set to
 
 ## Edit
 
-`AGENT_ID` and `AGENT_ID_B` are the agent names shown in your dashboard. `PATH_PREFIX` is where the test entry is written.
+In the `CUSTOMIZE` block at the top of `run.py`:
+
+| Setting | Meaning |
+| --- | --- |
+| `AGENT_ID` | agent name for the main key, shown in your dashboard |
+| `AGENT_ID_B` | agent name for the second key |
+| `PATH_PREFIX` | where the test entry is written |
 
 ## Adapt
 

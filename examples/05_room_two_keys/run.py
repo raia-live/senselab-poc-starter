@@ -37,7 +37,11 @@ QUERY = "How do I write a date on a shipping label?"
 # ────────────────────────────────────────────────────────────────────────────
 
 
+# ── The steps, in the order run() calls them ──────────────────────────────────
+
+
 def step(number: int, text: str) -> None:
+    """Print a numbered heading for one step."""
     print(f"\n{number}. {text}")
 
 
@@ -58,6 +62,9 @@ def host_opens_room(host: AgentMemory, topic: str, run_id: str) -> str:
     room_id = str(room["id"])
     print(f"   room {room_id} on topic {topic}")
 
+    # An ordinary write. It is shared with the room because its path is the
+    # room's topic. The run id in the text lets later steps check that they
+    # received this run's entry.
     rule = f"Dates on shipping labels are written DDMMMYY in upper case, e.g. 03FEB26. (run {run_id})"
     host.write(topic, "rule", rule, confidence=0.9)
     print(f"   host wrote {topic}/rule")
@@ -88,6 +95,8 @@ def guest_joins(guest: AgentMemory, token: str) -> None:
 
 def guest_reads_the_rule(guest: AgentMemory, topic: str, run_id: str) -> None:
     """The same retrieve as step 1 now returns what the host wrote."""
+    # The same query and path as step 1. Membership of the room is the only
+    # thing that changed.
     hits = retrieve_until_found(guest, QUERY, entity_path=topic)
     values = [str(h.entry.value) for h in hits]
     print(f"   guest retrieves on {topic}: {values or 'nothing'}")
@@ -98,8 +107,10 @@ def guest_reads_the_rule(guest: AgentMemory, topic: str, run_id: str) -> None:
 
 def guest_reports_back(guest: AgentMemory, room_id: str, topic: str, run_id: str) -> str:
     """The guest writes to the shared topic and messages the host."""
+    # The guest writes to the shared topic with its own key.
     guest.write(topic, "finding", f"Used the label rule on 17 November 2026: 17NOV26. (run {run_id})")
     print(f"   guest wrote {topic}/finding")
+    # A message in the room, addressed to the host's agent id.
     message = guest.room_discuss(
         room_id,
         f"Applied your label-date rule and wrote my result under 'finding'. (run {run_id})",
@@ -111,24 +122,33 @@ def guest_reports_back(guest: AgentMemory, room_id: str, topic: str, run_id: str
 
 def host_reads_and_replies(host: AgentMemory, room_id: str, topic: str, run_id: str, message_id: str) -> None:
     """The host sees the guest's entry and message, and answers in the thread."""
+    # The host reads the guest's entry with a plain read on the topic.
     finding = host.read(topic, "finding")
     print(f"   host reads {topic}/finding: {finding.value if finding else 'nothing'}")
     if finding is None or run_id not in str(finding.value):
         raise SystemExit("FAILED: the host did not get this run's finding through the room.")
 
+    # Messages addressed to the host. The result is a dict; the messages
+    # are under "items".
     inbox = host.room_discussions(room_id, addressed_to=HOST_ID).get("items", [])
     for item in inbox:
         print(f"   host's inbox: [{item.get('agent_id')}] {item.get('content')}")
     if not any(run_id in str(item.get("content")) for item in inbox):
         raise SystemExit("FAILED: the guest's message did not reach the host.")
 
+    # reply_to makes this message a reply to the guest's message.
     host.room_discuss(room_id, "Got it, thanks.", reply_to=message_id, addressed_to=GUEST_ID)
     print(f"   host replied to {GUEST_ID}")
 
 
+# ── The whole flow ────────────────────────────────────────────────────────────
+
+
 def run() -> None:
     run_id = new_run_id()
+    # The one path the room shares. Both agents read and write exactly this.
     topic = f"{TOPIC_PREFIX}/{run_id}"
+    # Two memory objects, one per API key.
     host = hosted(HOST_ID)
     guest = hosted(GUEST_ID, api_key=second_key())
     print(f"run id: {run_id}")
@@ -159,9 +179,14 @@ def run() -> None:
     print("Both directions worked: host -> guest through memory, guest -> host through memory and messages.")
 
 
+# ── Cleanup after a crashed run ───────────────────────────────────────────────
+
+
 def cleanup() -> None:
     """Delete rooms this example created and a failed run left behind."""
     host = hosted(HOST_ID)
+    # my_rooms lists the rooms the host is in. Keep those whose topic starts
+    # with this example's prefix.
     mine = [
         room
         for room in host.my_rooms()
@@ -172,6 +197,9 @@ def cleanup() -> None:
     for room in mine:
         host.room_delete(str(room["id"]))
         print(f"deleted room {room['id']} ({', '.join(room.get('entity_paths') or [])})")
+
+
+# ── Command line ──────────────────────────────────────────────────────────────
 
 
 def main() -> None:

@@ -2,14 +2,25 @@
 
 Two agents whose API keys belong to different users cannot see each other's memory. A room shares one topic between them. The host creates the room and a join link, the guest redeems the link, and after that both read and write the same entries and can message each other.
 
+## Before you run
+
+- Example 00 prints `Connected.`
+- `.env` has `AMFS_API_KEY` (the host) and `AMFS_API_KEY_B` (the guest).
+- The two keys come from different accounts. To get the second one, sign up at https://amfs.sense-lab.ai with another email address, confirm the email, and create an API key under Settings, API Keys. A colleague's key works as well.
+- Run example 00 again with both keys set. Its `second key` line should end with `ready for example 05`.
+- No model key is needed.
+
 ## Run
 
-Needs `AMFS_HTTP_URL` and `AMFS_API_KEY` (the host) and `AMFS_API_KEY_B` (the guest) in `.env`. The second key must come from a different user or account. Example 00 checks this. No model key.
+From the repository root:
 
 ```bash
 uv run python examples/05_room_two_keys/run.py
+```
 
-# If a run crashed and left its room open
+It makes about 15 SenseLab calls and deletes its room at the end. If a run crashed and left its room open, delete it with:
+
+```bash
 uv run python examples/05_room_two_keys/run.py cleanup
 ```
 
@@ -48,7 +59,14 @@ room 80c3522e-e6ee-4b32-b377-d787a8217f73 deleted
 Both directions worked: host -> guest through memory, guest -> host through memory and messages.
 ```
 
-This run used two keys from two new accounts. Steps 1 and 5 are the same retrieve by the same agent, before and after joining the room.
+This run used two keys from two new accounts.
+
+How to read it:
+
+- Steps 1 and 5 are the same retrieve by the same agent. It returns nothing before the room and the host's rule after joining.
+- Step 7 shows the other direction: the host reads the entry and the message the guest wrote.
+- `Both directions worked` is printed only if steps 5 and 7 received this run's data.
+- The join token is never printed.
 
 ## How it works
 
@@ -65,14 +83,21 @@ Steps 5 and 7 fail the run unless what arrived contains this run's id.
 
 ## Edit
 
-- `HOST_ID`, `GUEST_ID`: the agent names.
-- `TOPIC_PREFIX`: the shared topic is `<prefix>/<run id>`. `cleanup` deletes only rooms under this prefix.
-- `GUEST_ROLE`: `"collaborator"` can write. `"viewer"` is read-only, so step 6 is refused.
-- `LINK_MAX_USES`, `LINK_EXPIRES_IN_DAYS`: limits on the join link.
+In the `CUSTOMIZE` block at the top of `run.py`:
+
+| Setting | Meaning |
+| --- | --- |
+| `HOST_ID`, `GUEST_ID` | agent names for the two keys |
+| `TOPIC_PREFIX` | the shared topic is `<prefix>/<run id>`. `cleanup` deletes only rooms under this prefix |
+| `GUEST_ROLE` | `"collaborator"` can write. `"viewer"` is read-only, so step 6 is refused |
+| `LINK_MAX_USES`, `LINK_EXPIRES_IN_DAYS` | limits on the join link |
+| `QUERY` | the question the guest retrieves with |
 
 ## Adapt
 
-To share several topics, pass a list to `room_create`. To keep a room open across runs, remove the `room_delete` call and reuse the room id. In a real setup the host sends the link to the guest out of band; here both sides run in one script.
+- Several topics: pass a list of paths to `room_create`.
+- A room that stays open: remove the `room_delete` call and reuse the room id in later runs.
+- Two separate processes: in a real setup the host creates the room and sends the join link to the guest by another channel. The guest's process then needs only `room_redeem(link)` and `room_join(room_id)`.
 
 ## Gotchas
 

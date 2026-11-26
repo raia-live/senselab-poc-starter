@@ -14,8 +14,13 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+# Used with ANTHROPIC_API_KEY when POC_MODEL is not set.
 DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5-5"
+# Upper limit on the length of one model response.
 MAX_TOKENS = 4096
+
+
+# ── What the examples get back ────────────────────────────────────────────────
 
 
 @dataclass
@@ -40,7 +45,11 @@ class ToolRun:
     replies: list[Reply] = field(default_factory=list)
 
 
+# ── Choosing the provider and the model ───────────────────────────────────────
+
+
 def provider() -> str:
+    """'anthropic' or 'openai', decided by which API key is set."""
     if (os.environ.get("ANTHROPIC_API_KEY") or "").strip():
         return "anthropic"
     if (os.environ.get("OPENAI_API_KEY") or "").strip():
@@ -49,12 +58,16 @@ def provider() -> str:
 
 
 def model() -> str:
+    """POC_MODEL if set, otherwise the Anthropic default."""
     chosen = (os.environ.get("POC_MODEL") or "").strip()
     if chosen:
         return chosen
     if provider() == "anthropic":
         return DEFAULT_ANTHROPIC_MODEL
     raise SystemExit("Set POC_MODEL in .env to the OpenAI model to use: there is no default for OpenAI.")
+
+
+# ── The two functions the examples call ───────────────────────────────────────
 
 
 def complete(system: str, user: str) -> Reply:
@@ -83,6 +96,7 @@ def run_with_tools(
 
 
 def _call_tool(handlers: dict[str, Callable[..., str]], name: str, arguments: dict[str, Any]) -> str:
+    """Run one tool the model asked for and return its output as text."""
     handler = handlers.get(name)
     if handler is None:
         return f"error: there is no tool named {name}"
@@ -98,17 +112,21 @@ def _call_tool(handlers: dict[str, Callable[..., str]], name: str, arguments: di
 def _anthropic_loop(system, user, tools, handlers, max_steps) -> ToolRun:
     import anthropic
 
-    client = anthropic.Anthropic()
+    client = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY from the environment
     name = model()
+    # The conversation so far. It grows by two messages per tool round.
     messages: list[dict[str, Any]] = [{"role": "user", "content": user}]
+    # The parts of the request that stay the same every round.
     request: dict[str, Any] = {"model": name, "max_tokens": MAX_TOKENS, "system": system}
     if tools:
+        # Our tool format, translated to the one Anthropic expects.
         request["tools"] = [
             {"name": t["name"], "description": t["description"], "input_schema": t["parameters"]}
             for t in tools
         ]
     run = ToolRun(text="")
     for _ in range(max_steps):
+        # One round: call the model and record what it said and what it cost.
         started = time.monotonic()
         response = client.messages.create(messages=messages, **request)
         text = "".join(block.text for block in response.content if block.type == "text").strip()
@@ -123,6 +141,7 @@ def _anthropic_loop(system, user, tools, handlers, max_steps) -> ToolRun:
             )
         )
         run.text = text or run.text
+        # No tool calls in the response means the model has given its answer.
         uses = [block for block in response.content if block.type == "tool_use"]
         if not uses:
             break
@@ -144,14 +163,16 @@ def _anthropic_loop(system, user, tools, handlers, max_steps) -> ToolRun:
 def _openai_loop(system, user, tools, handlers, max_steps) -> ToolRun:
     import openai
 
-    client = openai.OpenAI()
+    client = openai.OpenAI()  # reads OPENAI_API_KEY from the environment
     name = model()
+    # The conversation so far. It grows with every tool round.
     messages: list[Any] = [
         {"role": "system", "content": system},
         {"role": "user", "content": user},
     ]
     request: dict[str, Any] = {"model": name, "max_completion_tokens": MAX_TOKENS}
     if tools:
+        # Our tool format, translated to the one OpenAI expects.
         request["tools"] = [
             {
                 "type": "function",
@@ -180,8 +201,10 @@ def _openai_loop(system, user, tools, handlers, max_steps) -> ToolRun:
             )
         )
         run.text = text or run.text
+        # No tool calls in the response means the model has given its answer.
         if not message.tool_calls:
             break
+        # Otherwise add the model's turn, then one result per tool call.
         messages.append(message)
         for call in message.tool_calls:
             arguments = json.loads(call.function.arguments or "{}")

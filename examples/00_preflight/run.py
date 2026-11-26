@@ -25,21 +25,31 @@ PATH_PREFIX = "poc/preflight"
 # ────────────────────────────────────────────────────────────────────────────
 
 
+# ── Step 1: the main key ──────────────────────────────────────────────────────
+
+
 def check_first_key(path: str) -> None:
     """Write with the main key and read the entry back."""
+    # Connect. Exits with a clear message if AMFS_HTTP_URL or AMFS_API_KEY is
+    # missing, so the script can never fall back to local storage.
     mem = hosted(AGENT_ID)
     host = urlparse(os.environ["AMFS_HTTP_URL"]).netloc
     print(f"service     {host}")
     print(f"agent       {mem.agent_id}")
     print(f"session     {mem.session_id}")
 
+    # write(entity_path, key, value) stores one entry and returns it.
     written = mem.write(path, "hello", "preflight entry, safe to ignore", confidence=1.0)
     print(f"wrote       {written.entity_path}/{written.key} (version {written.version})")
 
+    # read(entity_path, key) fetches one entry by its exact path and key.
     back = mem.read(path, "hello")
     if back is None or back.value != written.value:
         raise SystemExit("FAILED: the entry was written but did not read back.")
     print("read back   ok")
+
+
+# ── Step 2 (optional): the second key, for example 05 ─────────────────────────
 
 
 def check_second_key(path: str) -> None:
@@ -53,6 +63,7 @@ def check_second_key(path: str) -> None:
     if not key_b:
         print("second key  not set (only example 05 needs it)")
         return
+    # Connect with the second key and try to read what the first key wrote.
     guest = hosted(AGENT_ID_B, api_key=key_b)
     seen = guest.read(path, "hello")
     if seen is None:
@@ -64,7 +75,11 @@ def check_second_key(path: str) -> None:
         )
 
 
+# ── Entry point ───────────────────────────────────────────────────────────────
+
+
 def main() -> None:
+    # A new path on every run, so runs never overwrite each other.
     path = f"{PATH_PREFIX}/{new_run_id()}"
     try:
         check_first_key(path)

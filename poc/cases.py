@@ -35,6 +35,9 @@ class Case:
         return bool(lines) and self.expected in lines[-1]
 
 
+# The built-in cases. To use your own, edit or append to this list. Keep each
+# rule arbitrary: if the model can guess it, the control arm passes and the
+# experiment shows nothing.
 CASES: list[Case] = [
     Case(
         id="invoice-ref",
@@ -71,6 +74,7 @@ CASES: list[Case] = [
 
 
 def by_id(case_id: str) -> Case:
+    """Look a case up by its id, for the --case option and CASE_ID settings."""
     for case in CASES:
         if case.id == case_id:
             return case

@@ -2,19 +2,58 @@
 
 Solves the same task in two sessions. The first ends with the shortest possible commit. The second records everything the SDK accepts. Both traces are then fetched and printed field by field, so you can see what SenseLab stores by default and what it stores only when you pass it.
 
+## Before you run
+
+- Example 00 prints `Connected.`
+- `.env` has a model key: `ANTHROPIC_API_KEY`, or `OPENAI_API_KEY` together with `POC_MODEL`.
+
 ## Run
 
-Needs `AMFS_HTTP_URL`, `AMFS_API_KEY`, and a model key: `ANTHROPIC_API_KEY`, or `OPENAI_API_KEY` with `POC_MODEL`.
+From the repository root:
 
 ```bash
 uv run python examples/03_inspect_traces/run.py
 ```
 
-Two short model calls.
+It makes 1 write, 2 retrieves, 2 outcome commits, a few trace reads and 2 short model calls.
 
 ## Output
 
-This example has not been run end to end yet, so there is no sample here. It prints two blocks, one per trace. Each lists the outcome, `task_input`, `response_text`, session timing, entries read, queries, external contexts, actions and session metadata. Empty fields are marked.
+This example has not been run end to end yet. The format below comes from the code, with placeholders in angle brackets.
+
+```
+run id: <run id>
+
+── bare commit: commit_outcome(ref, outcome) ────────────────
+  outcome            poc-traces-<run id>-bare -> <outcome>
+  task_input         (not stored)
+  response_text      (not stored)
+  session            <session id>, <n> ms
+  entries read       <n>
+    poc/traces/<run id>/label-date/rule v1 confidence <c>: <the rule>
+  queries            <n>
+    <operation> {<parameters>} -> <n> result(s)
+  external contexts  0
+  actions            0
+  session metadata   <JSON, or (empty)>
+
+── full commit: record_* calls, task_input, response_text, attributes ──
+  outcome            poc-traces-<run id>-full -> <outcome>
+  task_input         <the task>
+  response_text      <the model's answer>
+  ...
+  external contexts  1
+    grader: expected 17NOV26 (source: poc/cases.py)
+  actions            1
+    submit_answer({"case": "label-date"}) -> <the model's answer>
+  session metadata   <JSON with model usage and your attributes>
+```
+
+How to read it:
+
+- Compare the two blocks line by line. Anything filled in the second and empty in the first is stored only when you pass it.
+- `(not stored)` marks a field the session never sent.
+- `no trace found for this commit` means the trace did not appear within 20 seconds. Run the example again.
 
 ## How it works
 
@@ -31,11 +70,21 @@ Stored only if you pass it: the prompt (`task_input`), the answer (`response_tex
 
 ## Edit
 
-`CASE_ID` picks the case from `poc/cases.py`. `ATTRIBUTES` holds your own labels, such as experiment name or arm, for filtering traces later.
+In the `CUSTOMIZE` block at the top of `run.py`:
+
+| Setting | Meaning |
+| --- | --- |
+| `WRITER_ID`, `SOLVER_ID` | agent names |
+| `PATH_PREFIX` | entries go under `<prefix>/<run id>/<case id>` |
+| `CASE_ID` | which case from `poc/cases.py` to run |
+| `ATTRIBUTES` | your own labels, such as experiment name or arm, for filtering traces later |
+| `SOLVER_SYSTEM` | the prompt |
 
 ## Adapt
 
-In `full_session`, delete any `record_*` call or `commit_outcome` argument and compare the trace. To log your own tool calls, add a `record_action` call next to each one.
+- To see the effect of one field, delete a `record_*` call or a `commit_outcome` argument in `full_session` and run again.
+- To log your own tool calls, add a `record_action` call next to each one.
+- To read traces in your own code, copy `fetch_trace`. It needs the outcome reference you passed to `commit_outcome`.
 
 ## Gotchas
 
