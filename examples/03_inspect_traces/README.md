@@ -30,7 +30,7 @@ run id: <run id>
   response_text      (not stored)
   session            <session id>, <n> ms
   entries read       <n>
-    poc/traces/<run id>/label-date/rule v1 confidence <c>: <the rule>
+    poc/traces/<run id>/<case id>/rule v1 confidence <c>: <the rule>
   queries            <n>
     <operation> {<parameters>} -> <n> result(s)
   external contexts  0
@@ -45,7 +45,7 @@ run id: <run id>
   external contexts  1
     grader: expected 17NOV26 (source: poc/cases.py)
   actions            1
-    submit_answer({"case": "label-date"}) -> <the model's answer>
+    submit_answer({"case": "<case id>"}) -> <the model's answer>
   session metadata   <JSON with model usage and your attributes>
 ```
 
@@ -76,7 +76,7 @@ In the `CUSTOMIZE` block at the top of `run.py`:
 | --- | --- |
 | `WRITER_ID`, `SOLVER_ID` | agent names |
 | `PATH_PREFIX` | entries go under `<prefix>/<run id>/<case id>` |
-| `CASE_ID` | which case from `poc/cases.py` to run |
+| `CASE_ID` | which case from `poc/cases.py` to run. The default is the first one |
 | `ATTRIBUTES` | your own labels, such as experiment name or arm, for filtering traces later |
 | `SOLVER_SYSTEM` | the prompt |
 

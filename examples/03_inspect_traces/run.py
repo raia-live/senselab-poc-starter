@@ -17,7 +17,7 @@ import time
 
 from amfs import AgentMemory, DecisionTrace, OutcomeType
 
-from poc.cases import by_id
+from poc.cases import CASES, by_id
 from poc.llm import Reply, complete
 from poc.memory import as_notes, hosted, new_run_id, retrieve_until_found
 
@@ -26,8 +26,9 @@ WRITER_ID = "poc-writer"
 SOLVER_ID = "poc-solver"
 PATH_PREFIX = "poc/traces"
 
-# Which case from poc/cases.py to run.
-CASE_ID = "label-date"
+# Which case from poc/cases.py to run: the first one, or an id from that file
+# in quotes, e.g. "label-date".
+CASE_ID = CASES[0].id
 
 # Anything you want to slice traces by later. Keys and values are yours.
 ATTRIBUTES = {"experiment": "poc-traces", "arm": "treatment"}

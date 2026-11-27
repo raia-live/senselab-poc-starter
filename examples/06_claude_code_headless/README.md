@@ -14,7 +14,7 @@ The experiment from example 01 with Claude Code as the agent. Claude Code reache
 From the repository root:
 
 ```bash
-uv run python examples/06_claude_code_headless/run.py                     # the label-date case
+uv run python examples/06_claude_code_headless/run.py                     # the first case in poc/cases.py
 uv run python examples/06_claude_code_headless/run.py --case invoice-ref  # another case
 ```
 
@@ -28,7 +28,7 @@ This example has not been run yet. The format below comes from the code, with pl
 run id: <run id>
 
 Agent A (Claude Code + MCP): saved  [<n> turns]
-Python SDK reads poc/claude-code/<run id>/label-date/rule:
+Python SDK reads poc/claude-code/<run id>/<case id>/rule:
   <the rule Claude Code wrote>
   written by poc-claude-writer
 
@@ -60,7 +60,7 @@ In the `CUSTOMIZE` block at the top of `run.py`:
 
 | Setting | Meaning |
 | --- | --- |
-| `CASE_ID` | the default case from `poc/cases.py` |
+| `CASE_ID` | the case to run when `--case` is not given. The default is the first one in `poc/cases.py` |
 | `PATH_PREFIX` | entries go under `<prefix>/<run id>/<case id>` |
 | `WRITER_ID`, `SOLVER_ID` | the agent ids the MCP server reports to SenseLab |
 | `CLAUDE_MODEL` | `None` uses Claude Code's default model. Set a model name to pin one |

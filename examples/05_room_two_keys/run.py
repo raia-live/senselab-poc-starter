@@ -1,6 +1,6 @@
 """05 - Two API keys, one room.
 
-Two agents whose keys belong to different users cannot see each other's
+Two agents whose keys belong to different accounts cannot see each other's
 memory. A room changes that for one topic: the host creates it and shares a
 join link, the guest redeems the link, and from then on both read and write
 the same entries and can message each other. No LLM calls.
@@ -19,8 +19,8 @@ from amfs import AgentMemory
 from poc.memory import entry_ref, hosted, new_run_id, retrieve_until_found, second_key
 
 # ── CUSTOMIZE ───────────────────────────────────────────────────────────────
-# AMFS_API_KEY is the host, AMFS_API_KEY_B the guest. An agent id belongs to
-# the user who first used it, so the two must differ.
+# AMFS_API_KEY is the host, AMFS_API_KEY_B the guest. The two ids differ so
+# the output and the dashboard show which agent did what.
 HOST_ID = "poc-host"
 GUEST_ID = "poc-guest"
 

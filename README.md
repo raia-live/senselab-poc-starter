@@ -9,7 +9,7 @@ Each example is a folder with a `run.py` and a `README.md`. The only shared code
 - Python 3.11 or later.
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) to install dependencies and run the scripts. `pip` works too (see step 2).
 - A SenseLab account and an API key (step 3).
-- For examples 01, 03, 04 and 06: a model API key from Anthropic or OpenAI. Example 07 uses one if it is set.
+- For examples 01, 03, 04 and 06: a model API key from Anthropic or OpenAI. Example 07 needs one too, except with `--memory-only` or with your own agent.
 - For examples 05 and 07: a second SenseLab API key from a different account.
 - For example 06: the Claude Code CLI.
 
@@ -63,10 +63,10 @@ All of them go in `.env`. `.env.example` lists them with comments.
 | --- | --- | --- |
 | `AMFS_HTTP_URL` | all examples | `https://amfs-login.sense-lab.ai` (already in `.env.example`) |
 | `AMFS_API_KEY` | all examples | your SenseLab API key |
-| `AMFS_API_KEY_B` | 05, 07, and optionally 00 | a second SenseLab key from a different user or account |
+| `AMFS_API_KEY_B` | 05, 07, and optionally 00 | a second SenseLab key from a different account |
 | `AMFS_API_KEYS_B_PER_CASE` | 07, optional | comma-separated keys, one account per case. Replaces `AMFS_API_KEY_B` in 07 |
-| `ANTHROPIC_API_KEY` | 01, 03, 04, 06, optional in 07 | an Anthropic API key. 06 works only with this one |
-| `OPENAI_API_KEY` | 01, 03, 04, optional in 07 | use in place of the Anthropic key. Also set `POC_MODEL` |
+| `ANTHROPIC_API_KEY` | 01, 03, 04, 06, and 07 with the built-in agent | an Anthropic API key. 06 works only with this one |
+| `OPENAI_API_KEY` | 01, 03, 04, and 07 with the built-in agent | use in place of the Anthropic key. Also set `POC_MODEL` |
 | `POC_MODEL` | 01, 03, 04 | model name. Optional with Anthropic (default `claude-sonnet-5-5`), required with OpenAI |
 
 If both model keys are set, Anthropic is used.
@@ -110,7 +110,7 @@ hits = mem.retrieve("How do I write a date?", entity_path="my-experiment/run-1/c
 
 Does Agent B need a room to read what Agent A wrote?
 
-No, if both use the same API key. Entries are shared between agents on a key, and B finds A's entry by retrieving on the same `entity_path` ([01](examples/01_memory_handoff)). A room is needed when the keys belong to different users ([05](examples/05_room_two_keys)).
+No, if both use keys from the same account. Entries are shared between agents in an account, and B finds A's entry by retrieving on the same `entity_path` ([01](examples/01_memory_handoff)). A room is needed when the keys belong to different accounts ([05](examples/05_room_two_keys)).
 
 Can Agent B be limited to reading one case, with no write access?
 
@@ -133,9 +133,14 @@ Claude Code connects through the SenseLab MCP server, and the Python SDK is not 
 | File | What it holds | Change it to |
 | --- | --- | --- |
 | `examples/*/run.py`, `CUSTOMIZE` block | agent ids, paths, prompts, limits | rename agents, move entries, reword prompts |
-| `poc/cases.py` | three test cases with expected answers | use your own tasks |
+| `poc/cases.py` | three test cases with expected answers, shared by 01, 03, 04, 06 and 07 | use your own tasks |
+| `examples/07_readonly_case_experiment/run.py`, `solve()` | the agent both arms of example 07 call | call your own agent |
 | `poc/llm.py` | the model client: `complete()` and `run_with_tools()` | call your own agent or another provider |
 | `poc/memory.py` | `hosted()`, `new_run_id()`, `retrieve_until_found()` | change how runs are named or how long a retrieve waits |
+
+If a coding agent is making the changes, point it at [AGENTS.md](AGENTS.md) first. It lists what must not be changed, the SDK calls the examples use, and how to check an edit without running against the service.
+
+The SenseLab SDK versions are pinned in `pyproject.toml`, and `uv.lock` records every dependency the examples were run with.
 
 Every run writes under a path containing a new run id, so runs do not collide. Old entries stay in your account. Results are written to `results/`, which is gitignored.
 

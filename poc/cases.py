@@ -35,9 +35,11 @@ class Case:
         return bool(lines) and self.expected in lines[-1]
 
 
-# The built-in cases. To use your own, edit or append to this list. Keep each
-# rule arbitrary: if the model can guess it, the control arm passes and the
-# experiment shows nothing.
+# The built-in cases, used by examples 01, 03, 04, 06 and 07. To use your
+# own, edit or append to this list. Keep each rule arbitrary: if the model can
+# guess it, the control arm passes and the experiment shows nothing.
+# Examples 03 and 06 run the first case by default. Example 07 matches the
+# keys in AMFS_API_KEYS_B_PER_CASE to these cases by position.
 CASES: list[Case] = [
     Case(
         id="invoice-ref",

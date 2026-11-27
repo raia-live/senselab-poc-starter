@@ -21,12 +21,13 @@ import shutil
 import subprocess
 import tempfile
 
-from poc.cases import Case, by_id
+from poc.cases import CASES, Case, by_id
 from poc.memory import hosted, new_run_id
 
 # ── CUSTOMIZE ───────────────────────────────────────────────────────────────
-# Which case from poc/cases.py to run. One case is three Claude Code runs.
-CASE_ID = "label-date"
+# Which case from poc/cases.py to run when --case is not given: the first
+# one, or an id from that file in quotes. One case is three Claude Code runs.
+CASE_ID = CASES[0].id
 PATH_PREFIX = "poc/claude-code"
 
 # The agent ids the MCP server reports to SenseLab for each run.

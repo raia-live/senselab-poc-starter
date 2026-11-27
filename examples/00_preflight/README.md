@@ -6,7 +6,7 @@ Writes one entry to hosted SenseLab and reads it back. Run it before the other e
 
 - `.env` exists in the repository root with `AMFS_HTTP_URL` and `AMFS_API_KEY` (see the [setup steps](../../README.md#setup)).
 - No model key is needed.
-- Optional: `AMFS_API_KEY_B`, to check the second key that example 05 uses.
+- Optional: `AMFS_API_KEY_B`, to check the second key that examples 05 and 07 use.
 
 ## Run
 
@@ -26,7 +26,7 @@ agent       poc-preflight
 session     sess-23e88522
 wrote       poc/preflight/5983d3dc/hello (version 1)
 read back   ok
-second key  not set (only example 05 needs it)
+second key  not set (only examples 05 and 07 need it)
 
 Connected. The entry is in your dashboard under poc/preflight/5983d3dc
 ```
@@ -37,7 +37,7 @@ How to read it:
 - `wrote` and `read back ok` mean the key can write and read.
 - `Connected.` means every check passed.
 - The session id and the path suffix change on every run.
-- With `AMFS_API_KEY_B` set to a key from another account, the `second key` line reads `ok, and it cannot see the first key's entry: ready for example 05`.
+- With `AMFS_API_KEY_B` set to a key from another account, the `second key` line reads `ok, and it cannot see the first key's entry: ready for examples 05 and 07`.
 
 ## How it works
 

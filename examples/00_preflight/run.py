@@ -16,8 +16,9 @@ import httpx
 from poc.memory import hosted, new_run_id
 
 # ── CUSTOMIZE ───────────────────────────────────────────────────────────────
-# The agent ids this check registers. An id belongs to the user who first
-# used it, so the second key needs a different one.
+# The agent ids this check registers. Within one account an id belongs to
+# the user who first used it, so the second key gets a different one in case
+# both keys turn out to be from the same account.
 AGENT_ID = "poc-preflight"
 AGENT_ID_B = "poc-preflight-guest"
 # Where the test entry goes. Every run writes under a new id.
@@ -56,22 +57,22 @@ def check_second_key(path: str) -> None:
     """With ``AMFS_API_KEY_B`` set: can the second key see the first key's entry?
 
     Example 05 needs two keys that do NOT already share memory. If this one
-    can read the entry above, both keys belong to the same user and a room
+    can read the entry above, both keys belong to the same account and a room
     would demonstrate nothing.
     """
     key_b = (os.environ.get("AMFS_API_KEY_B") or "").strip()
     if not key_b:
-        print("second key  not set (only example 05 needs it)")
+        print("second key  not set (only examples 05 and 07 need it)")
         return
     # Connect with the second key and try to read what the first key wrote.
     guest = hosted(AGENT_ID_B, api_key=key_b)
     seen = guest.read(path, "hello")
     if seen is None:
-        print("second key  ok, and it cannot see the first key's entry: ready for example 05")
+        print("second key  ok, and it cannot see the first key's entry: ready for examples 05 and 07")
     else:
         print(
             "second key  ok, but it CAN see the first key's entry. Both keys share memory "
-            "already; example 05 needs a key from a different user or account."
+            "already; examples 05 and 07 need a key from a different account."
         )
 
 
@@ -86,7 +87,7 @@ def main() -> None:
         check_second_key(path)
     except httpx.HTTPStatusError as exc:
         # The server's own explanation is in the message: a wrong key is a
-        # 401, an agent id that belongs to another user is a 409.
+        # 401, an agent id that belongs to another user in the account is a 409.
         raise SystemExit(f"FAILED: {exc}") from exc
     except httpx.TransportError as exc:
         raise SystemExit(f"FAILED: could not reach {os.environ.get('AMFS_HTTP_URL')}: {exc}") from exc

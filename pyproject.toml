@@ -5,10 +5,12 @@ description = "Runnable examples for a first SenseLab memory experiment: one age
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    # Pinned to the versions the examples were run with on hosted SenseLab.
     # 0.5.44 is the first release with AgentMemory.from_env() and working
-    # room methods. Every example here depends on one or the other.
-    "amfs>=0.5.44",
-    "amfs-adapter-http>=0.1.39",
+    # room methods; every example depends on one or the other. To move to a
+    # newer release, change both pins, run `uv lock`, and run example 00.
+    "amfs==0.5.44",
+    "amfs-adapter-http==0.1.39",
     "anthropic>=0.40",
     "openai>=1.50",
     "python-dotenv>=1.0",

@@ -1,13 +1,13 @@
 # 05 - Two keys, one room
 
-Two agents whose API keys belong to different users cannot see each other's memory. A room shares one topic between them. The host creates the room and a join link, the guest redeems the link, and after that both read and write the same entries and can message each other.
+Two agents whose API keys belong to different accounts cannot see each other's memory. A room shares one topic between them. The host creates the room and a join link, the guest redeems the link, and after that both read and write the same entries and can message each other.
 
 ## Before you run
 
 - Example 00 prints `Connected.`
 - `.env` has `AMFS_API_KEY` (the host) and `AMFS_API_KEY_B` (the guest).
 - The two keys come from different accounts. To get the second one, sign up at https://amfs.sense-lab.ai with another email address, confirm the email, and create an API key under Settings, API Keys. A colleague's key works as well.
-- Run example 00 again with both keys set. Its `second key` line should end with `ready for example 05`.
+- Run example 00 again with both keys set. Its `second key` line should end with `ready for examples 05 and 07`.
 - No model key is needed.
 
 ## Run
@@ -102,9 +102,9 @@ In the `CUSTOMIZE` block at the top of `run.py`:
 ## Gotchas
 
 - Read and write the exact topic. A sub-path such as `<topic>/notes` is outside the room, and a write there stays in the writer's own account.
-- Redeeming a link brings in every agent the redeeming user owns, and each gets a briefing entry under `<agent id>/briefings/rooms/<topic>`. Those entries stay after the room is deleted. Use a dedicated user for experiments.
+- Redeeming a link brings in every agent in the redeeming account, and each gets a briefing entry under `<agent id>/briefings/rooms/<topic>`. Those entries stay after the room is deleted. Use a dedicated user for experiments.
 - Messages need `discussions=True` at creation. Without it `room_discuss` returns a 403.
 - A plan can limit open rooms. A 402 from `room_create` means another room is still open; run `cleanup`.
-- Two keys from the same user already share memory and need no room.
+- Two keys from the same account already share memory and need no room.
 - The join token is a credential. The example does not print it.
 - Copy out what the guest wrote before deleting the room. After deletion in our runs, the host could still read its own `rule`, and the guest's `finding` could not be read with either key.

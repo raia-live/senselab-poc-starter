@@ -7,6 +7,10 @@ to a different account, joins, retrieves, and is graded with that memory
 next case. B never writes and never commits an outcome; what it retrieved is
 saved to a results file.
 
+Both arms answer the task through solve(task, notes) in this file. The control
+passes no notes; the treatment passes what B retrieved. To test your own agent,
+replace the body of solve().
+
 The SenseLab calls, in order, for one case:
 
     A  write(path, "rule", ...)                  save the case's rule
@@ -17,7 +21,7 @@ The SenseLab calls, in order, for one case:
     A  room_delete(room_id)                      B's access to the case ends
 
     uv run python examples/07_readonly_case_experiment/run.py
-    uv run python examples/07_readonly_case_experiment/run.py --memory-only   # skip the model calls
+    uv run python examples/07_readonly_case_experiment/run.py --memory-only   # SenseLab steps only: no agent, no model
     uv run python examples/07_readonly_case_experiment/run.py cleanup         # delete rooms a crashed run left open
 """
 
@@ -53,7 +57,7 @@ READER_ID = "poc-case-reader"
 # case shares exactly this path. `cleanup` only touches rooms under the prefix.
 PATH_PREFIX = "poc-case"
 
-# How many entries Agent B pulls into its prompt.
+# How many entries, at most, Agent B retrieves and passes to solve() as notes.
 RETRIEVE_LIMIT = 3
 
 # Confidence Agent A gives its rule (0 to 1).
@@ -65,16 +69,57 @@ LINK_EXPIRES_IN_DAYS = 1
 # True: B also tries one write to the case path, to show the server refuses it.
 CHECK_WRITE_IS_REFUSED = True
 
+# True: Agent A asks the built-in model to turn the grader's feedback into one
+# general rule and stores that, as in example 01. Needs a model key in .env.
+# False: Agent A stores the grader's feedback as it is, with no model call.
+# --memory-only stores the feedback as it is whatever this says.
+REWRITE_RULE_WITH_MODEL = True
+
+# True: solve() below calls the built-in model, so the run needs a model key
+# in .env and stops before doing anything if there is none. Set this to False
+# once solve() calls your own agent.
+SOLVE_USES_BUILTIN_MODEL = True
+
+# The system prompt for the built-in solve().
 SOLVER_SYSTEM = (
     "You work at Northwind Freight, which has its own house rules. Do the task. "
     "Put the final answer alone on the last line."
 )
+# The prompt Agent A uses when REWRITE_RULE_WITH_MODEL is True.
 DISTIL_SYSTEM = (
     "You are an agent that just got a task wrong and was told why. Write the one rule a "
     "colleague would need to get any task of this kind right. One sentence, general "
     "(not about this particular instance), and include a worked example. Reply with the rule only."
 )
 # ────────────────────────────────────────────────────────────────────────────
+
+
+# ── The agent under test ──────────────────────────────────────────────────────
+
+
+def solve(task: str, notes: str | None) -> str:
+    """Answer one task. Both arms call this; replace the body with your own agent.
+
+    ``task`` is a case's ``eval_task`` from ``poc/cases.py``.
+
+    ``notes`` is ``None`` in the control arm. In the treatment arm it is what
+    Agent B retrieved, one entry per line, each line starting with ``"- "``.
+    It is also ``None`` in the treatment arm if B retrieved nothing.
+
+    Return the answer as text with the final answer alone on the last line:
+    the grader (``Case.check`` in ``poc/cases.py``) reads only the last
+    non-empty line and passes when it contains the expected value, in the
+    exact upper and lower case.
+
+    This function is given no SenseLab object and no key. If your agent can
+    reach SenseLab by other means (its own tools, or the AMFS_* variables that
+    this process has loaded from .env), the control arm is not memory-free;
+    run the control as a separate process without those variables.
+    """
+    prompt = task
+    if notes:
+        prompt += "\n\nNotes left by colleagues that may apply:\n" + notes
+    return complete(SOLVER_SYSTEM, prompt).text
 
 
 def case_path(run_id: str, case: Case) -> str:
@@ -103,22 +148,22 @@ def reader_keys() -> tuple[list[str], bool]:
 
 
 def model_is_configured() -> bool:
-    """True when .env has a model key, so the task step can run."""
+    """True when .env has a model key for the built-in model in poc/llm.py."""
     return any((os.environ.get(name) or "").strip() for name in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY"))
 
 
 # ── Agent A: write the rules, open and close one room per case ────────────────
 
 
-def agent_a_writes(writer: AgentMemory, run_id: str, use_model: bool) -> None:
+def agent_a_writes(writer: AgentMemory, run_id: str, rewrite: bool) -> None:
     """Agent A saves one rule per case, all of them before any room exists."""
     print(f"Agent A ({writer.agent_id}) writes one rule per case")
     for case in CASES:
-        if use_model:
+        if rewrite:
             # Ask the model to turn the grader's feedback into one general rule.
             rule = complete(DISTIL_SYSTEM, f"Task: {case.teach_task}\nGrader's feedback: {case.feedback}").text
         else:
-            # No model: store the grader's feedback as it is.
+            # Store the grader's feedback as it is.
             rule = case.feedback
         # Save it under this case's own path with the key "rule". The path is
         # what the room will share and what B will retrieve on.
@@ -179,8 +224,9 @@ def write_is_refused(reader: AgentMemory, path: str) -> bool:
         # An ordinary write, the same call A uses. Only the role differs.
         reader.write(path, "viewer-write-check", "Written by the read-only check in example 07.")
     except httpx.HTTPStatusError as exc:
-        # 403 with error "room_read_only" is the server refusing a viewer.
-        if exc.response.status_code == 403:
+        # 403 with error "room_read_only" in the body is the server refusing
+        # a viewer. A 403 for any other reason does not count.
+        if exc.response.status_code == 403 and "room_read_only" in exc.response.text:
             return True
         raise  # any other error is a real failure, so let it stop the run
     # No error: the write was saved, which means B is not read-only.
@@ -234,27 +280,26 @@ def agent_b_reads(api_key: str, run_id: str, case: Case) -> tuple[AgentMemory, d
 
 
 def control_arm(case: Case) -> dict:
-    """No memory: this function is given no SenseLab object and no key."""
-    # The bare task goes to the model. Nothing from SenseLab is involved.
-    answer = complete(SOLVER_SYSTEM, case.eval_task).text
-    return {"answer": answer, "passed": case.check(answer)}
+    """No memory: this function is given no SenseLab object, no key and no retrieved entries."""
+    # The bare task goes to the agent with notes=None. Nothing from SenseLab is involved.
+    answer = solve(case.eval_task, None)
+    return {"notes": None, "answer": answer, "passed": case.check(answer)}
 
 
 def treatment_arm(case: Case, hits: list[ScoredEntry]) -> dict:
-    """The same task with the retrieved entries added to the prompt."""
-    prompt = case.eval_task
-    if hits:
-        # One bullet per retrieved entry, appended to the task.
-        prompt += "\n\nNotes left by colleagues that may apply:\n" + as_notes(hits)
-    answer = complete(SOLVER_SYSTEM, prompt).text
+    """The same task, with the retrieved entries passed to the agent as notes."""
+    # One bullet per retrieved entry. If nothing was retrieved the agent gets
+    # notes=None, the same call as the control.
+    notes = as_notes(hits) if hits else None
+    answer = solve(case.eval_task, notes)
     # Graded by the string-match checker in poc/cases.py, the same as the control.
-    return {"answer": answer, "passed": case.check(answer)}
+    return {"notes": notes, "answer": answer, "passed": case.check(answer)}
 
 
 # ── One case from start to finish ─────────────────────────────────────────────
 
 
-def run_case(writer: AgentMemory, api_key: str, run_id: str, case: Case, *, use_model: bool, own_account: bool) -> dict:
+def run_case(writer: AgentMemory, api_key: str, run_id: str, case: Case, *, run_task: bool, own_account: bool) -> dict:
     """Open the room, let B read and answer, close the room, check it is closed."""
     path = case_path(run_id, case)
     # Every check that fails adds a line here. The run exits with an error at
@@ -294,9 +339,9 @@ def run_case(writer: AgentMemory, api_key: str, run_id: str, case: Case, *, use_
             if not seen["write_refused"]:
                 problems.append("B's write was accepted, so B is not read-only")
 
-        # The task itself. Skipped when no model key is set.
+        # The task itself, answered by solve(). Skipped with --memory-only.
         control = treatment = None
-        if use_model:
+        if run_task:
             control = control_arm(case)
             treatment = treatment_arm(case, hits)
             print(f"  control {_mark(control)}   treatment {_mark(treatment)}   (expected {case.expected})")
@@ -343,20 +388,31 @@ def run(memory_only: bool) -> None:
     run_id = new_run_id()
     # B's key for each case, and whether each case has its own account.
     keys, own_account = reader_keys()
-    # The model is used when a model key is set and --memory-only is not given.
-    use_model = model_is_configured() and not memory_only
+    # --memory-only switches off both the task and the rule rewriting, so the
+    # run makes SenseLab calls only.
+    run_task = not memory_only
+    rewrite = REWRITE_RULE_WITH_MODEL and not memory_only
+    # Stop now, before anything is written, if the built-in model is needed
+    # and .env has no key for it.
+    if (rewrite or (run_task and SOLVE_USES_BUILTIN_MODEL)) and not model_is_configured():
+        raise SystemExit(
+            "No model key in .env. Add ANTHROPIC_API_KEY (or OPENAI_API_KEY and POC_MODEL), "
+            "or pass --memory-only to run the SenseLab steps without a model. If solve() calls "
+            "your own agent, set SOLVE_USES_BUILTIN_MODEL and REWRITE_RULE_WITH_MODEL to False."
+        )
     # Agent A, connected with AMFS_API_KEY.
     writer = hosted(WRITER_ID)
 
     print(f"run id: {run_id}")
     print(f"reader: {'one account per case' if own_account else 'one account for every case'}")
-    print(f"model:  {'used for the rules and the task' if use_model else 'not used; memory steps only'}\n")
+    print(f"rules:  {'rewritten by the built-in model' if rewrite else 'the feedback, stored as given'}")
+    print(f"task:   {'answered by solve()' if run_task else 'skipped; memory steps only'}\n")
 
     # A writes every rule first, then the cases run one after another, each
     # with its own room and its own key for B.
-    agent_a_writes(writer, run_id, use_model)
+    agent_a_writes(writer, run_id, rewrite)
     rows = [
-        run_case(writer, key, run_id, case, use_model=use_model, own_account=own_account)
+        run_case(writer, key, run_id, case, run_task=run_task, own_account=own_account)
         for key, case in zip(keys, CASES, strict=True)
     ]
 
@@ -366,7 +422,7 @@ def run(memory_only: bool) -> None:
     out.write_text(json.dumps({"run_id": run_id, "reader_account_per_case": own_account, "cases": rows}, indent=2))
 
     print()
-    if use_model:
+    if run_task:
         control_passed = sum(row["control"]["passed"] for row in rows)
         treatment_passed = sum(row["treatment"]["passed"] for row in rows)
         print(f"control {control_passed}/{len(rows)}   treatment {treatment_passed}/{len(rows)}")
@@ -406,7 +462,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     # "run" is the experiment. "cleanup" deletes rooms a crashed run left open.
     parser.add_argument("step", nargs="?", default="run", choices=["run", "cleanup"])
-    parser.add_argument("--memory-only", action="store_true", help="skip the model calls even if a model key is set")
+    parser.add_argument("--memory-only", action="store_true", help="run the SenseLab steps only: no agent and no model")
     args = parser.parse_args()
     try:
         cleanup() if args.step == "cleanup" else run(args.memory_only)
