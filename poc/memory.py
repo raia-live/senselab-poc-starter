@@ -31,12 +31,12 @@ def hosted(agent_id: str, api_key: str | None = None) -> AgentMemory:
 
 
 def second_key() -> str:
-    """The key from the other account in the room examples, or an error naming it."""
+    """The other user's key in the room examples, or an error naming it."""
     key = (os.environ.get("AMFS_API_KEY_B") or "").strip()
     if not key:
         raise SystemExit(
             "AMFS_API_KEY_B is not set. This needs a second SenseLab API key "
-            "created in a different account; add it to .env."
+            "created by a different user; add it to .env."
         )
     return key
 

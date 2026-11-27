@@ -10,7 +10,7 @@ Each example is a folder with a `run.py` and a `README.md`. The only shared code
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) to install dependencies and run the scripts. `pip` works too (see step 2).
 - A SenseLab account and an API key (step 3).
 - For examples 01, 03, 04 and 06: a model API key from Anthropic or OpenAI. Example 07 needs one too, except with `--memory-only` or with your own agent.
-- For examples 05 and 07: a second SenseLab API key from a different account.
+- For examples 05 and 07: a second SenseLab API key created by a different user. The user can be in your account or in another one.
 - For example 06: the Claude Code CLI.
 
 ## Setup
@@ -63,8 +63,8 @@ All of them go in `.env`. `.env.example` lists them with comments.
 | --- | --- | --- |
 | `AMFS_HTTP_URL` | all examples | `https://amfs-login.sense-lab.ai` (already in `.env.example`) |
 | `AMFS_API_KEY` | all examples | your SenseLab API key |
-| `AMFS_API_KEY_B` | 05, 07, and optionally 00 | a second SenseLab key from a different account |
-| `AMFS_API_KEYS_B_PER_CASE` | 07, optional | comma-separated keys, one account per case. Replaces `AMFS_API_KEY_B` in 07 |
+| `AMFS_API_KEY_B` | 05, 07, and optionally 00 | a second SenseLab key created by a different user, in your account or another |
+| `AMFS_API_KEYS_B_PER_CASE` | 07, optional | comma-separated keys, one user per case. Replaces `AMFS_API_KEY_B` in 07 |
 | `ANTHROPIC_API_KEY` | 01, 03, 04, 06, and 07 with the built-in agent | an Anthropic API key. 06 works only with this one |
 | `OPENAI_API_KEY` | 01, 03, 04, and 07 with the built-in agent | use in place of the Anthropic key. Also set `POC_MODEL` |
 | `POC_MODEL` | 01, 03, 04 | model name. Optional with Anthropic (default `claude-sonnet-5-5`), required with OpenAI |
@@ -84,11 +84,11 @@ Run them in order. Every command accepts `--help`.
 | [04_agent_memory_tools](examples/04_agent_memory_tools) | The model searches and writes memory itself, through tools | `uv run python examples/04_agent_memory_tools/run.py` | not yet |
 | [05_room_two_keys](examples/05_room_two_keys) | Two agents on different API keys share memory and messages through a room | `uv run python examples/05_room_two_keys/run.py` | yes |
 | [06_claude_code_headless](examples/06_claude_code_headless) | The handoff experiment with headless Claude Code | `uv run python examples/06_claude_code_headless/run.py` | not yet |
-| [07_readonly_case_experiment](examples/07_readonly_case_experiment) | The handoff experiment with Agent B in another account, read-only, one case at a time, and a control with no memory | `uv run python examples/07_readonly_case_experiment/run.py` | memory steps yes, model steps not yet |
+| [07_readonly_case_experiment](examples/07_readonly_case_experiment) | The handoff experiment with Agent B as another user, read-only, one case at a time, and a control with no memory | `uv run python examples/07_readonly_case_experiment/run.py` | memory steps yes, model steps not yet |
 
 The READMEs for 00, 02 and 05 show real output, and so does the one for 07 for its memory steps. The model calls in 01, 03, 04, 06 and 07 have not been run end to end yet. Their READMEs show that output format with placeholders.
 
-If Agent B must be limited by the server to reading one case, start with 07. If one account for both agents is enough, start with 01.
+If Agent B must be limited by the server to reading one case, start with 07. If both agents can share one key, start with 01.
 
 Each example README has the same sections: what it needs, how to run it, the output and how to read it, how the code works, what to edit, how to adapt it, and known gotchas.
 
@@ -110,11 +110,11 @@ hits = mem.retrieve("How do I write a date?", entity_path="my-experiment/run-1/c
 
 Does Agent B need a room to read what Agent A wrote?
 
-No, if both use keys from the same account. Entries are shared between agents in an account, and B finds A's entry by retrieving on the same `entity_path` ([01](examples/01_memory_handoff)). A room is needed when the keys belong to different accounts ([05](examples/05_room_two_keys)).
+No, if both use keys created by the same user. Entries are shared between one user's agents, and B finds A's entry by retrieving on the same `entity_path` ([01](examples/01_memory_handoff)). A room is needed when the keys belong to different users, whether or not they are in the same account ([05](examples/05_room_two_keys)).
 
 Can Agent B be limited to reading one case, with no write access?
 
-Yes, when B's key belongs to a different account from A's. A opens a room on the case's path and shares a join link with the viewer role. B can then read that path and nothing else in A's account, and the server refuses B's writes ([07](examples/07_readonly_case_experiment)).
+Yes, when B's key was created by a different user from A's. Both users can be in the same account. A opens a room on the case's path and shares a join link with the viewer role. B can then read that path and nothing else of A's, and the server refuses B's writes ([07](examples/07_readonly_case_experiment)).
 
 How do we isolate cases, reset memory, and run a control without memory?
 

@@ -1,8 +1,8 @@
-"""07 - Agent B reads one case at a time, read-only, from another account.
+"""07 - Agent B reads one case at a time, read-only, as another user.
 
 Agent A owns the memory. For each case it opens a room on that case's path
 and shares a join link with the viewer role. Agent B, whose API key belongs
-to a different account, joins, retrieves, and is graded with that memory
+to a different user, joins, retrieves, and is graded with that memory
 (treatment) and without any memory (control). A deletes the room before the
 next case. B never writes and never commits an outcome; what it retrieved is
 saved to a results file.
@@ -16,7 +16,7 @@ The SenseLab calls, in order, for one case:
     A  write(path, "rule", ...)                  save the case's rule
     A  room_create(path)                         a room that shares only that path
     A  room_share(room_id, role="viewer")        a single-use, read-only join link
-    B  room_redeem(token), room_join(room_id)    B's account enters the room
+    B  room_redeem(token), room_join(room_id)    B's user enters the room
     B  retrieve(task, entity_path=path)          B reads the rule; the result is saved
     A  room_delete(room_id)                      B's access to the case ends
 
@@ -47,9 +47,10 @@ from poc.memory import (
 )
 
 # ── CUSTOMIZE ───────────────────────────────────────────────────────────────
-# AMFS_API_KEY is Agent A's account. Agent B's key comes from another account:
+# AMFS_API_KEY is Agent A's user. Agent B's key comes from another user, in the
+# same account or a different one:
 # AMFS_API_KEY_B (one reader for every case), or AMFS_API_KEYS_B_PER_CASE
-# (a comma-separated list, one account per case, in the order of CASES).
+# (a comma-separated list, one user per case, in the order of CASES).
 WRITER_ID = "poc-case-writer"
 READER_ID = "poc-case-reader"
 
@@ -131,7 +132,7 @@ def case_path(run_id: str, case: Case) -> str:
 
 
 def reader_keys() -> tuple[list[str], bool]:
-    """One key per case for Agent B, and whether each case has its own account."""
+    """One key per case for Agent B, and whether each case has its own user."""
     # AMFS_API_KEYS_B_PER_CASE, if set, is "key1,key2,key3". Split it and drop
     # spaces and empty items.
     per_case = [k.strip() for k in (os.environ.get("AMFS_API_KEYS_B_PER_CASE") or "").split(",") if k.strip()]
@@ -139,11 +140,11 @@ def reader_keys() -> tuple[list[str], bool]:
         if len(per_case) < len(CASES):
             raise SystemExit(
                 f"AMFS_API_KEYS_B_PER_CASE has {len(per_case)} key(s) and there are {len(CASES)} cases. "
-                "Give one key per case, each from a different account, or remove the variable."
+                "Give one key per case, each from a different user, or remove the variable."
             )
         # Case 1 uses the first key, case 2 the second, and so on.
         return per_case[: len(CASES)], True
-    # Otherwise AMFS_API_KEY_B is the one reader account, reused for every case.
+    # Otherwise AMFS_API_KEY_B is the one reader user, reused for every case.
     return [second_key()] * len(CASES), False
 
 
@@ -174,7 +175,7 @@ def agent_a_writes(writer: AgentMemory, run_id: str, rewrite: bool) -> None:
 def agent_a_opens_room(writer: AgentMemory, path: str, run_id: str, case: Case) -> tuple[str, str]:
     """A room on this case's path, and a single-use viewer link to it."""
     # The first argument is the topic: the one path the room shares. Nothing
-    # else in A's account becomes visible to the room's members.
+    # else of A's becomes visible to the room's members.
     room = writer.room_create(
         path,
         name=f"POC case {case.id} ({run_id})",
@@ -245,7 +246,7 @@ def agent_b_reads(api_key: str, run_id: str, case: Case) -> tuple[AgentMemory, d
     # the full record of what B retrieved; nothing else needs to be committed.
     hits = retrieve_until_found(reader, case.eval_task, entity_path=path, limit=RETRIEVE_LIMIT)
 
-    # Check 1: the other cases exist in A's account. Ask for each by its
+    # Check 1: the other cases exist in A's memory. Ask for each by its
     # exact path. B is not in a room for them, so this should find nothing.
     visible_others = [
         entry_ref(hit.entry)
@@ -254,9 +255,9 @@ def agent_b_reads(api_key: str, run_id: str, case: Case) -> tuple[AgentMemory, d
     ]
 
     # Check 2: joining a room saves a briefing with the room's entries in B's
-    # OWN account, under <agent id>/briefings/rooms/<case path>, and it stays
-    # there after the room is deleted. List which other cases B's account
-    # holds such a copy of. With one account per case this stays empty.
+    # OWN memory, under <agent id>/briefings/rooms/<case path>, and it stays
+    # there after the room is deleted. List which other cases B's user
+    # holds such a copy of. With one user per case this stays empty.
     copies = [
         other
         for other in other_paths
@@ -271,7 +272,7 @@ def agent_b_reads(api_key: str, run_id: str, case: Case) -> tuple[AgentMemory, d
         "hits": hits,
         "retrieved": [describe(hit) for hit in hits],
         "other_cases_visible": visible_others,
-        "other_cases_copied_to_reader_account": copies,
+        "other_cases_copied_to_reader": copies,
         "write_refused": refused,
     }
 
@@ -299,7 +300,7 @@ def treatment_arm(case: Case, hits: list[ScoredEntry]) -> dict:
 # ── One case from start to finish ─────────────────────────────────────────────
 
 
-def run_case(writer: AgentMemory, api_key: str, run_id: str, case: Case, *, run_task: bool, own_account: bool) -> dict:
+def run_case(writer: AgentMemory, api_key: str, run_id: str, case: Case, *, run_task: bool, own_user: bool) -> dict:
     """Open the room, let B read and answer, close the room, check it is closed."""
     path = case_path(run_id, case)
     # Every check that fails adds a line here. The run exits with an error at
@@ -327,12 +328,12 @@ def run_case(writer: AgentMemory, api_key: str, run_id: str, case: Case, *, run_
         if seen["other_cases_visible"]:
             problems.append("B could retrieve another case by its path")
 
-        # With one reader account this is expected from the second case on,
-        # so it is only printed. With one account per case it is a failure.
-        copies = seen["other_cases_copied_to_reader_account"]
-        print(f"  briefings in B's account  {f'{len(copies)} earlier case(s)' if copies else 'no other case'}")
-        if copies and own_account:
-            problems.append("a per-case key holds another case's briefing: two of the keys share an account")
+        # With one reader user this is expected from the second case on,
+        # so it is only printed. With one user per case it is a failure.
+        copies = seen["other_cases_copied_to_reader"]
+        print(f"  briefings in B's memory   {f'{len(copies)} earlier case(s)' if copies else 'no other case'}")
+        if copies and own_user:
+            problems.append("a per-case key holds another case's briefing: two of the keys belong to the same user")
 
         if seen["write_refused"] is not None:
             print(f"  B's write to the path     {'refused (403)' if seen['write_refused'] else 'ACCEPTED'}")
@@ -386,8 +387,8 @@ def _mark(arm: dict) -> str:
 def run(memory_only: bool) -> None:
     # A new id per run, so every run writes under paths nobody has used.
     run_id = new_run_id()
-    # B's key for each case, and whether each case has its own account.
-    keys, own_account = reader_keys()
+    # B's key for each case, and whether each case has its own user.
+    keys, own_user = reader_keys()
     # --memory-only switches off both the task and the rule rewriting, so the
     # run makes SenseLab calls only.
     run_task = not memory_only
@@ -404,7 +405,7 @@ def run(memory_only: bool) -> None:
     writer = hosted(WRITER_ID)
 
     print(f"run id: {run_id}")
-    print(f"reader: {'one account per case' if own_account else 'one account for every case'}")
+    print(f"reader: {'one user per case' if own_user else 'one user for every case'}")
     print(f"rules:  {'rewritten by the built-in model' if rewrite else 'the feedback, stored as given'}")
     print(f"task:   {'answered by solve()' if run_task else 'skipped; memory steps only'}\n")
 
@@ -412,14 +413,14 @@ def run(memory_only: bool) -> None:
     # with its own room and its own key for B.
     agent_a_writes(writer, run_id, rewrite)
     rows = [
-        run_case(writer, key, run_id, case, run_task=run_task, own_account=own_account)
+        run_case(writer, key, run_id, case, run_task=run_task, own_user=own_user)
         for key, case in zip(keys, CASES, strict=True)
     ]
 
     # What B retrieved for every case, with no outcome committed anywhere.
     RESULTS_DIR.mkdir(exist_ok=True)
     out = RESULTS_DIR / f"07_readonly_case_experiment-{run_id}.json"
-    out.write_text(json.dumps({"run_id": run_id, "reader_account_per_case": own_account, "cases": rows}, indent=2))
+    out.write_text(json.dumps({"run_id": run_id, "reader_user_per_case": own_user, "cases": rows}, indent=2))
 
     print()
     if run_task:

@@ -62,7 +62,7 @@ mem.read(entity_path, key) -> MemoryEntry | None
 
 mem.retrieve(query, *, entity_path=None, limit=10) -> list[ScoredEntry]
 # Semantic search. With entity_path: that exact path only.
-# Without it: everything the key can read, including the account's own briefings.
+# Without it: everything the key can read, including the user's own briefings.
 
 mem.search(*, entity_path=None, limit=100) -> list[MemoryEntry]
 # Listing. Example 07 uses it with an exact entity_path.
@@ -117,21 +117,22 @@ A failed call raises `httpx.HTTPStatusError`. The examples catch it in `main()` 
 | 402 | a plan limit. In examples 05 and 07: another room is still open, run `cleanup` |
 | 403 with `room_read_only` in the body | a viewer tried to write to a room's path |
 | 403 from `room_discuss` | the room was created with `discussions=False` |
-| 409 | the agent id belongs to another user in the same account, or `room_create` was called on a path that already has a room |
+| 409 | the agent id belongs to another user in the same account (give each user its own agent ids), or `room_create` was called on a path that already has a room |
 
-## Accounts, keys and rooms
+## Users, keys and rooms
 
-- An account is one signup. Keys created in the same account read the same memory.
-- Keys from different accounts see nothing of each other's memory. A room shares one path between them.
-- The same agent id can be used in different accounts.
-- Redeeming a join link admits the account's user and brings in every agent that user owns.
-- Joining a room saves a briefing with the room's entries in the joiner's own account, under `<agent id>/briefings/rooms/<room path>`. It stays after the room is deleted. A `retrieve` without `entity_path` can return it.
-- A write by a room guest to a path that is not in a room succeeds and lands in the guest's own account.
-- All of this was observed with accounts that have one user. Accounts with several users have not been tried.
+- An account has one or more users. Memory belongs to the user whose key wrote it. Keys created by the same user read the same memory.
+- Keys created by different users see nothing of each other's memory, also when both users are in one account. A room shares one path between them.
+- Within an account an agent id belongs to the user who used it first. The same id can be used in different accounts.
+- Redeeming a join link admits the user who owns the key and brings in every agent that user owns.
+- Joining a room saves a briefing with the room's entries in the joiner's own memory, under `<agent id>/briefings/rooms/<room path>`. It stays after the room is deleted. A `retrieve` without `entity_path` can return it.
+- A write by a room guest to a path that is not in a room succeeds and lands in the guest's own memory. The host does not see it.
+- Give each user its own paths. Two users should not write to the same path and key unless a room shares that path.
+- All of this was observed with two users in separate accounts and with two users in one account.
 
 ## What has been run
 
-- Run on hosted SenseLab: examples 00, 02 and 05, and example 07 with `--memory-only` and one reader account.
-- Not run: the model calls in examples 01, 03, 04, 06 and 07. Example 07 with `AMFS_API_KEYS_B_PER_CASE` and separate accounts.
+- Run on hosted SenseLab: examples 00, 02 and 05, and example 07 with `--memory-only` and one reader user. Examples 00, 05 and 07 were run both with the second key from another account and with the second key from another user of the same account.
+- Not run: the model calls in examples 01, 03, 04, 06 and 07. Example 07 with `AMFS_API_KEYS_B_PER_CASE` and separate users.
 
 If you change code on a path that has not been run, say so in your summary to the developer.

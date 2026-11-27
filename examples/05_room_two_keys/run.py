@@ -1,6 +1,6 @@
 """05 - Two API keys, one room.
 
-Two agents whose keys belong to different accounts cannot see each other's
+Two agents whose keys belong to different users cannot see each other's
 memory. A room changes that for one topic: the host creates it and shares a
 join link, the guest redeems the link, and from then on both read and write
 the same entries and can message each other. No LLM calls.

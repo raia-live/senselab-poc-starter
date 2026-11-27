@@ -18,7 +18,7 @@ from poc.memory import hosted, new_run_id
 # ── CUSTOMIZE ───────────────────────────────────────────────────────────────
 # The agent ids this check registers. Within one account an id belongs to
 # the user who first used it, so the second key gets a different one in case
-# both keys turn out to be from the same account.
+# both keys turn out to be from users of the same account.
 AGENT_ID = "poc-preflight"
 AGENT_ID_B = "poc-preflight-guest"
 # Where the test entry goes. Every run writes under a new id.
@@ -57,7 +57,7 @@ def check_second_key(path: str) -> None:
     """With ``AMFS_API_KEY_B`` set: can the second key see the first key's entry?
 
     Example 05 needs two keys that do NOT already share memory. If this one
-    can read the entry above, both keys belong to the same account and a room
+    can read the entry above, both keys belong to the same user and a room
     would demonstrate nothing.
     """
     key_b = (os.environ.get("AMFS_API_KEY_B") or "").strip()
@@ -72,7 +72,7 @@ def check_second_key(path: str) -> None:
     else:
         print(
             "second key  ok, but it CAN see the first key's entry. Both keys share memory "
-            "already; examples 05 and 07 need a key from a different account."
+            "already; examples 05 and 07 need a key created by a different user."
         )
 
 

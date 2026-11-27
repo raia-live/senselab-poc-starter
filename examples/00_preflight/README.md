@@ -37,7 +37,7 @@ How to read it:
 - `wrote` and `read back ok` mean the key can write and read.
 - `Connected.` means every check passed.
 - The session id and the path suffix change on every run.
-- With `AMFS_API_KEY_B` set to a key from another account, the `second key` line reads `ok, and it cannot see the first key's entry: ready for examples 05 and 07`.
+- With `AMFS_API_KEY_B` set to a key created by another user, the `second key` line reads `ok, and it cannot see the first key's entry: ready for examples 05 and 07`.
 
 ## How it works
 
